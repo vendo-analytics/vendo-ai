@@ -142,30 +142,35 @@ export function useADKWebSocket({
         try {
           const message = JSON.parse(event.data);
 
-          // Handle ping/pong
-          if (message.type === "pong") {
-            return;
-          }
-
           // Handle turn completion first
           if (message.turn_complete) {
             console.log("[WS] Turn complete received");
-            callbacksRef.current.onTextMessage("", true);
+            callbacksRef.current.onTextMessage("", true); // Mark final message complete
             if (callbacksRef.current.onTurnComplete) {
               callbacksRef.current.onTurnComplete();
             }
             return;
           }
 
+          // Ensure message has mime_type
+          if (!message.mime_type) {
+            message.mime_type = "text/plain";
+          }
+
           // Handle text
           if (message.mime_type === "text/plain") {
-            const response = message.data;
-            
-            // Pass through the response exactly as received
-            callbacksRef.current.onTextMessage(response, false, "assistant");
-            // Add assistant response to conversation history
-            conversationHistory.current.push({ role: "assistant", content: response });
-            console.log("[WS] Updated conversation history:", conversationHistory.current);
+            // If this is a tool output, format it nicely
+            if (message.tool_output) {
+              const toolName = message.tool_name || "Tool";
+              const output = message.data;
+              
+              // Format the tool output with a header
+              const formattedOutput = `🔍 ${toolName} Results:\n${output}`;
+              callbacksRef.current.onTextMessage(formattedOutput, false);
+            } else {
+              // Regular message
+              callbacksRef.current.onTextMessage(message.data, false);
+            }
           }
 
           // Handle audio (optional)
@@ -301,11 +306,11 @@ export function useADKWebSocket({
           }
         }
 
-        // Only update the UI with interim results
+        // Only update the UI with interim results as assistant message
         if (interimTranscript && interimTranscript !== interimMessageRef.current) {
           interimMessageRef.current = interimTranscript;
-          // Show interim results as user message with isFinal=false
-          callbacksRef.current.onTextMessage(interimTranscript, false, "user");
+          // Show interim results as assistant message with isFinal=false
+          callbacksRef.current.onTextMessage(interimTranscript, false, "assistant");
         }
 
         // Store the final transcript

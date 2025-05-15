@@ -80,6 +80,7 @@ export function useADKWebSocket({
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const interimMessageRef = useRef<string>("");
+  const stoppedManuallyRef = useRef(false);
 
   // Store callbacks in refs to prevent unnecessary reconnections
   const callbacksRef = useRef({
@@ -237,18 +238,18 @@ export function useADKWebSocket({
           }
         }
 
-        // Update the UI with interim results as a user message
+        // Only update the UI, do NOT send to backend
         if (interimTranscript && interimTranscript !== interimMessageRef.current) {
           interimMessageRef.current = interimTranscript;
-          // Show interim results as a user message
           callbacksRef.current.onTextMessage(interimTranscript, false);
         }
-        
-        // When we have a final result, just store it
+
+        // Store the final transcript, but do NOT send to backend yet
         if (finalTranscript) {
           const finalText = finalTranscript.trim();
           if (finalText) {
             interimMessageRef.current = finalText;
+            callbacksRef.current.onTextMessage(finalText, false); // Optionally update UI
           }
         }
       };
@@ -263,6 +264,22 @@ export function useADKWebSocket({
       };
 
       recognition.onend = () => {
+        // Only send the message if we stopped manually
+        if (stoppedManuallyRef.current && interimMessageRef.current) {
+          const finalText = interimMessageRef.current;
+          interimMessageRef.current = "";
+          stoppedManuallyRef.current = false;
+          if (ws.current?.readyState === WebSocket.OPEN) {
+            sendUserMessage(finalText);
+          } else {
+            connect();
+            setTimeout(() => {
+              if (ws.current?.readyState === WebSocket.OPEN) {
+                sendUserMessage(finalText);
+              }
+            }, 1000);
+          }
+        }
         // Only restart recognition if we're still recording
         if (isRecording) {
           recognition.start();
@@ -318,13 +335,31 @@ export function useADKWebSocket({
   }, [isRecording, connect, sendUserMessage]);
 
   const stopListening = useCallback(() => {
-    // Set isRecording to false first to prevent any new messages from being sent
     setIsRecording(false);
+    stoppedManuallyRef.current = true;
 
-    // Stop speech recognition
+    // If recognition is running, stop it and wait for onend to fire
     if (recognitionRef.current) {
       recognitionRef.current.stop();
       recognitionRef.current = null;
+    } else {
+      // If recognition is already ended (due to silence), do NOT send the transcript
+      // Only send if the user manually stops recording by pressing the mic button
+      if (interimMessageRef.current) {
+        const finalText = interimMessageRef.current;
+        interimMessageRef.current = "";
+        stoppedManuallyRef.current = false;
+        if (ws.current?.readyState === WebSocket.OPEN) {
+          sendUserMessage(finalText);
+        } else {
+          connect();
+          setTimeout(() => {
+            if (ws.current?.readyState === WebSocket.OPEN) {
+              sendUserMessage(finalText);
+            }
+          }, 1000);
+        }
+      }
     }
 
     // Stop audio processing
@@ -344,39 +379,6 @@ export function useADKWebSocket({
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
-
-    // Send final transcript if we have one
-    if (interimMessageRef.current) {
-      const finalText = interimMessageRef.current;
-      interimMessageRef.current = "";
-      
-      // Create a new WebSocket connection if needed
-      if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
-        connect();
-      }
-
-      // Wait for connection and send message
-      const sendMessage = () => {
-        if (ws.current?.readyState === WebSocket.OPEN) {
-          sendUserMessage(finalText);
-          // Only close the connection after sending
-          setTimeout(() => {
-            if (ws.current) {
-              ws.current.close();
-            }
-          }, 1000); // Give it time to send the message
-        } else {
-          setTimeout(sendMessage, 100); // Retry after a short delay
-        }
-      };
-      sendMessage();
-    } else {
-      // If no message to send, just close the connection
-      if (ws.current) {
-        ws.current.close();
-      }
-    }
-
     console.log("[Audio] Stopped recording");
   }, [connect, sendUserMessage]);
 

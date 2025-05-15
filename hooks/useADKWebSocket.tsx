@@ -350,25 +350,33 @@ export function useADKWebSocket({
       const finalText = interimMessageRef.current;
       interimMessageRef.current = "";
       
-      // Ensure we have a connection before sending
-      if (ws.current?.readyState === WebSocket.OPEN) {
-        sendUserMessage(finalText);
-      } else {
-        console.error("WebSocket not connected when trying to send final transcription");
-        // Try to reconnect and send
+      // Create a new WebSocket connection if needed
+      if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
         connect();
-        setTimeout(() => {
-          if (ws.current?.readyState === WebSocket.OPEN) {
-            sendUserMessage(finalText);
-          }
-        }, 1000);
+      }
+
+      // Wait for connection and send message
+      const sendMessage = () => {
+        if (ws.current?.readyState === WebSocket.OPEN) {
+          sendUserMessage(finalText);
+          // Only close the connection after sending
+          setTimeout(() => {
+            if (ws.current) {
+              ws.current.close();
+            }
+          }, 1000); // Give it time to send the message
+        } else {
+          setTimeout(sendMessage, 100); // Retry after a short delay
+        }
+      };
+      sendMessage();
+    } else {
+      // If no message to send, just close the connection
+      if (ws.current) {
+        ws.current.close();
       }
     }
 
-    // Close WebSocket connection
-    if (ws.current) {
-      ws.current.close();
-    }
     console.log("[Audio] Stopped recording");
   }, [connect, sendUserMessage]);
 

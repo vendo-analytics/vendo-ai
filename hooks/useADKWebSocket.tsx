@@ -133,7 +133,18 @@ export function useADKWebSocket({
 
           // Handle text
           if (message.mime_type === "text/plain") {
-            callbacksRef.current.onTextMessage(message.data, false);
+            // If this is a tool output, format it nicely
+            if (message.tool_output) {
+              const toolName = message.tool_name || "Tool";
+              const output = message.data;
+              
+              // Format the tool output with a header
+              const formattedOutput = `🔍 ${toolName} Results:\n${output}`;
+              callbacksRef.current.onTextMessage(formattedOutput, false);
+            } else {
+              // Regular message
+              callbacksRef.current.onTextMessage(message.data, false);
+            }
           }
 
           // Handle audio (optional)

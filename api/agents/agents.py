@@ -60,24 +60,12 @@ google_search_agent = Agent(
 # 3. Root orchestration agent
 # ────────────────────────────────────────────────────────────────────────────
 
-root_agent_x = Agent(
-    name="agent_router",
-    model="gemini-2.0-flash",
-    description="Job is to route the user's request to the right sub-agent.",
-    instruction=ROOT_AGENT_INSTRUCTION,
-    sub_agents=[
-        get_bigquery_query_agent,
-    ],
-    tools=[
-        AgentTool(agent=google_search), 
-    ]
-)
-
-
 root_agent = Agent(
     name="agent_router",
     model="gemini-2.0-flash-live-001",
     description="Job is to route the user's request to the right sub-agent.",
-    instruction=ROOT_AGENT_INSTRUCTION
+    instruction=ROOT_AGENT_INSTRUCTION,
+    tools=[google_search],  # Add google_search tool directly
+    sub_agents=[get_bigquery_query_agent, google_search_agent]
 )
 

@@ -58,23 +58,24 @@ export function Chat() {
         }
   
         // For non-recording messages (assistant responses)
-        if (last?.role === "assistant" && !isFinal) {
+        if (!isRecording && last?.role === "assistant" && !isFinal) {
           return [
             ...prev.slice(0, -1),
             { ...last, content: last.content + chunk },
           ];
         }
   
-        if (chunk && !isFinal) {
-          return [
-            ...prev,
-            {
-              id: `assistant-${Date.now()}`,
-              role: "assistant",
-              content: chunk,
-            },
-          ];
-        }
+        // Prevent assistant response from showing while still recording
+      if (!isRecording && chunk && !isFinal) {
+        return [
+          ...prev,
+          {
+            id: `assistant-${Date.now()}`,
+            role: "assistant",
+            content: chunk,
+          },
+        ];
+      }
 
         return prev;
       });

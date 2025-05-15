@@ -249,7 +249,11 @@ export function useADKWebSocket({
           const finalText = finalTranscript.trim();
           if (finalText) {
             interimMessageRef.current = finalText;
-            callbacksRef.current.onTextMessage(finalText, false); // Optionally update UI
+        
+            // Only update UI, don't send to backend or render assistant yet
+            if (stoppedManuallyRef.current) {
+              callbacksRef.current.onTextMessage(finalText, false);
+            }
           }
         }
       };

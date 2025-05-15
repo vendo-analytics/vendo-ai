@@ -29,7 +29,7 @@ from .prompts import (
 
 bigquery_query_runner_agent = Agent(
     name="bigquery_query_runner_agent",
-    model="gemini-2.0-flash",
+    model="gemini-2.0-flash-live-001",
     description="Builds & executes the BigQuery query, returns raw rows.",
     instruction=BIGQUERY_QUERY_RUNNER_AGENT_INSTRUCTION,
     tools=[query_bigquery],
@@ -40,7 +40,7 @@ bigquery_query_runner_agent = Agent(
 
 get_bigquery_query_agent = Agent(
     name="get_bigquery_query_agent",
-    model="gemini-2.0-flash",
+    model="gemini-2.0-flash-live-001",
     description="Returns the BigQuery SQL query to use with bigquery_query_runner_agent which queries the table.",
     instruction=GET_BIGQUERY_QUERY_AGENT_INSTRUCTION,
     tools=[AgentTool(agent=bigquery_query_runner_agent)],
@@ -50,7 +50,7 @@ get_bigquery_query_agent = Agent(
 
 # google search agent
 google_search_agent = Agent(
-    model='gemini-2.0-flash-exp',
+    model="gemini-2.0-flash-live-001",
     name='google_search_agent',
     instruction=GOOGLE_SEARCH_AGENT_INSTRUCTION,
     tools=[google_search]

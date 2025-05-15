@@ -55,7 +55,8 @@ declare global {
 }
 
 type Props = {
-  onTextMessage: (textChunk: string, isFinal?: boolean) => void;
+  onTextMessage: (textChunk: string, isFinal?: boolean, role?: "user" | "assistant") => void;
+
   onAudioMessage?: (audioBuffer: ArrayBuffer) => void;
   onTurnComplete?: () => void;
 };

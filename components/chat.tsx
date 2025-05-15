@@ -59,11 +59,11 @@ export function Chat() {
   
         // For non-recording messages (assistant responses)
         if (!isRecording && last?.role === "assistant" && !isFinal) {
-          return [
-            ...prev.slice(0, -1),
-            { ...last, content: last.content + chunk },
-          ];
-        }
+  return [
+    ...prev.slice(0, -1),
+    { ...last, content: last.content + chunk },
+  ];
+}
   
         // Prevent assistant response from showing while still recording
       if (!isRecording && chunk && !isFinal) {

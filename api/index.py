@@ -83,6 +83,9 @@ def start_agent_session(session_id, is_audio=False):
 async def agent_to_client_messaging(websocket, live_events):
     """Agent to client communication"""
     try:
+        print(websocket)
+        print(live_events)
+        print("HERE")
         while True:
             async for event in live_events:
                 try:
@@ -118,6 +121,7 @@ async def agent_to_client_messaging(websocket, live_events):
 
                     # If it's text and a parial text, send it
                     if part.text and event.partial:
+                    
                         message = {
                             "mime_type": "text/plain",
                             "data": part.text
@@ -157,7 +161,13 @@ async def client_to_agent_messaging(websocket, live_request_queue):
         while True:
             try:
                 # Decode JSON message
-                message_json = await websocket.receive_text()
+                try:
+                    message_json = await websocket.receive_text()
+                except Exception as e:
+                    print(f"Received non-text frame: {e}")
+                    await websocket.close(code=1003)  # Unsupported Data
+                    return
+                #message_json = await websocket.receive_text()
                 message = json.loads(message_json)
                 mime_type = message["mime_type"]
                 data = message["data"]

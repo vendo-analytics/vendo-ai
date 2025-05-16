@@ -130,28 +130,39 @@ export function useADKWebSocket({
         reconnectAttempts.current = 0;
         // Send initial conversation history when connecting
         if (conversationHistory.current.length > 0) {
+          console.log("0");
           socket.send(JSON.stringify({
             mime_type: "text/plain",
             data: "",
             history: conversationHistory.current
           }));
+
         }
       };
 
       socket.onmessage = (event) => {
         try {
-          const message = JSON.parse(event.data);
+          // Only process messages if we're fully connected
+          if (ws.current?.readyState !== WebSocket.OPEN) {
+            console.log("[WS] Ignoring message - connection not ready");
+            return;
+          }
 
+          console.log("[WS] Received message:", event.data);
+          const message = JSON.parse(event.data);
+          
           // Handle turn completion first
           if (message.turn_complete) {
             console.log("[WS] Turn complete received");
             callbacksRef.current.onTextMessage("", true); // Mark final message complete
+            
             if (callbacksRef.current.onTurnComplete) {
               callbacksRef.current.onTurnComplete();
             }
             return;
           }
-
+        
+          
           // Ensure message has mime_type
           if (!message.mime_type) {
             message.mime_type = "text/plain";
@@ -166,6 +177,7 @@ export function useADKWebSocket({
               
               // Format the tool output with a header
               const formattedOutput = `🔍 ${toolName} Results:\n${output}`;
+              
               callbacksRef.current.onTextMessage(formattedOutput, false);
             } else {
               // Regular message
@@ -404,6 +416,7 @@ export function useADKWebSocket({
         
         if (ws.current?.readyState === WebSocket.OPEN) {
           const base64 = btoa(String.fromCharCode(...new Uint8Array(pcmData.buffer)));
+          
           ws.current.send(JSON.stringify({
             mime_type: "audio/pcm",
             data: base64,

@@ -25,7 +25,10 @@ def query_bigquery(query: str):
             "columns": event_data_df.columns.tolist(),
             "row_count": len(event_data_df)
         }
-        return result
+        return {
+            "mime_type": "text/plain",
+            "data": f"Query executed: {query}\nRows returned: {len(result['data'])}"
+        }
     except Exception as e:
         error_msg = f"❌ Error fetching event data: {str(e)}"
         print(error_msg)

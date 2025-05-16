@@ -182,13 +182,7 @@ root_agent = Agent(
     name="agent_router",
     model="gemini-2.0-flash-live-001",
     description="Job is to route the user's request to the right sub-agent.",
-    instruction="""You are a monitoring agent. You can do video monitoring and stock price monitoring
-      using the provided tools/functions.
-      When users want to monitor a video stream,
-      You can use monitor_video_stream function to do that. When monitor_video_stream
-      returns the alert, you should tell the users.
-      When users want to monitor a stock price, you can use monitor_stock_price.
-      Don't ask too many questions. Don't be too talkative.""",
+    instruction=ROOT_AGENT_INSTRUCTION,
     tools=[google_search,
          query_bigquery
     ], # Enable tool output formatting

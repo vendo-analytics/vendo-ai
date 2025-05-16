@@ -136,19 +136,12 @@ export function useADKWebSocket({
             data: "",
             history: conversationHistory.current
           }));
-
         }
       };
 
       socket.onmessage = (event) => {
         try {
-          // Only process messages if we're fully connected
-          if (ws.current?.readyState !== WebSocket.OPEN) {
-            console.log("[WS] Ignoring message - connection not ready");
-            return;
-          }
-
-          console.log("[WS] Received message:", event.data);
+          console.log(event)
           const message = JSON.parse(event.data);
           
           // Handle turn completion first

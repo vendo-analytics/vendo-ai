@@ -83,11 +83,11 @@ def start_agent_session(session_id, is_audio=False):
 async def agent_to_client_messaging(websocket, live_events):
     """Agent to client communication"""
     try:
-        print(websocket)
-        print(live_events)
-        print("HERE")
+        
         while True:
+            
             async for event in live_events:
+                
                 try:
                     # If the turn complete or interrupted, send it
                     if event.turn_complete or event.interrupted:
@@ -96,7 +96,7 @@ async def agent_to_client_messaging(websocket, live_events):
                             "interrupted": event.interrupted,
                         }
                         await websocket.send_text(json.dumps(message))
-                        print(f"[AGENT TO CLIENT]: {message}")
+                        print(f"[AGENT TO CLIENT]: {message}", flush=True)
                         continue
 
                     # Read the Content and its first Part
@@ -160,6 +160,7 @@ async def client_to_agent_messaging(websocket, live_request_queue):
     try:
         while True:
             try:
+                
                 # Decode JSON message
                 try:
                     message_json = await websocket.receive_text()
@@ -168,9 +169,16 @@ async def client_to_agent_messaging(websocket, live_request_queue):
                     await websocket.close(code=1003)  # Unsupported Data
                     return
                 #message_json = await websocket.receive_text()
+                
+                print(message_json, flush=True)
+                
                 message = json.loads(message_json)
                 mime_type = message["mime_type"]
+                
                 data = message["data"]
+                if data == '':
+                    data = 'hi'
+                
 
                 # Send the message to the agent
                 if mime_type == "text/plain":
@@ -228,11 +236,12 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, is_audio: st
         # Start agent session
         session_id = str(session_id)
         live_events, live_request_queue = start_agent_session(session_id, is_audio == "true")
-
+        
         # Start tasks
         agent_to_client_task = asyncio.create_task(
             agent_to_client_messaging(websocket, live_events)
         )
+        
         client_to_agent_task = asyncio.create_task(
             client_to_agent_messaging(websocket, live_request_queue)
         )

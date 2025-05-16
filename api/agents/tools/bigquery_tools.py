@@ -15,19 +15,22 @@ def query_bigquery(query: str):
             scopes=['https://www.googleapis.com/auth/cloud-platform']
         )
     try:
-        
+        print("HERE")
+        print(query)
         client = bigquery.Client(credentials=credentials)
         job_config = bigquery.QueryJobConfig()
         event_data_df = client.query(query, job_config=job_config).to_dataframe()
-    
-        result = {
-            "data": event_data_df.to_dict(orient='records'),
-            "columns": event_data_df.columns.tolist(),
-            "row_count": len(event_data_df)
-        }
+        
+        print(event_data_df)
+        result_data = event_data_df.to_dict(orient='records')
+        if len(result_data) == 0:
+            message = "✅ Query executed successfully, but no rows were returned."
+        else:
+            first_row = result_data[0]
+            message = "✅ Query Result:\n" + "\n".join([f"{k}: {v}" for k, v in first_row.items()])
         return {
             "mime_type": "text/plain",
-            "data": f"Query executed: {query}\nRows returned: {len(result['data'])}"
+            "data": message
         }
     except Exception as e:
         error_msg = f"❌ Error fetching event data: {str(e)}"

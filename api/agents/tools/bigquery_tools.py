@@ -7,6 +7,15 @@ from langgraph.types import interrupt, Command
 from google.cloud import bigquery
 from google.oauth2 import service_account
 
+from typing import TYPE_CHECKING
+from google.genai import types
+from typing_extensions import override
+
+from google.adk.tools.base_tool import BaseTool
+from google.adk.tools.tool_context import ToolContext
+from google.adk.models import LlmRequest
+
+
 
 def query_bigquery(query: str):
     print("▶️ get_event_data()")
@@ -25,9 +34,10 @@ def query_bigquery(query: str):
             "columns": event_data_df.columns.tolist(),
             "row_count": len(event_data_df)
         }
-        return result
+        
     except Exception as e:
         error_msg = f"❌ Error fetching event data: {str(e)}"
         print(error_msg)
         return error_msg
+    
 

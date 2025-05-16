@@ -21,14 +21,14 @@ import { Textarea } from "./ui/textarea";
 
 const suggestedActions = [
   {
-    title: "What is the weather",
-    label: "in San Francisco?",
-    action: "What is the weather in San Francisco?",
+    title: "Show me total revenue",
+    label: "by campaign for last month",
+    action: "Show me total revenue by campaign for last month",
   },
   {
-    title: "How is python useful",
-    label: "for AI engineers?",
-    action: "How is python useful for AI engineers?",
+    title: "What's our conversion rate",
+    label: "from page views to purchases?",
+    action: "What's our conversion rate from page views to purchases?",
   },
 ];
 
@@ -85,26 +85,9 @@ export function MultimodalInput({
     }
   };
 
-  const [localStorageInput, setLocalStorageInput] = useLocalStorage(
-    "input",
-    ""
-  );
-
-  useEffect(() => {
-    if (textareaRef.current) {
-      const domValue = textareaRef.current.value;
-      const finalValue = domValue || localStorageInput || "";
-      setInput(finalValue);
-      adjustHeight();
-    }
-  }, []);
-
-  useEffect(() => {
-    setLocalStorageInput(input);
-  }, [input, setLocalStorageInput]);
-
   const handleInput = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(event.target.value);
+    const value = event.target.value;
+    setInput(value);
     adjustHeight();
   };
 
@@ -113,15 +96,15 @@ export function MultimodalInput({
       toast.error("Please wait for the model to finish its response!");
       return;
     }
-    if (!input.trim()) return;
+    if (!input?.trim()) return;
 
     handleSubmit();
-    setLocalStorageInput("");
+    setInput("");
 
     if (width && width > 768) {
       textareaRef.current?.focus();
     }
-  }, [handleSubmit, setLocalStorageInput, width, input, isLoading]);
+  }, [handleSubmit, setInput, width, input, isLoading]);
 
   return (
     <div className="relative w-full flex flex-col gap-4">
@@ -139,10 +122,12 @@ export function MultimodalInput({
               <Button
                 variant="ghost"
                 onClick={async () => {
-                  await append({
-                    role: "user",
-                    content: suggestedAction.action,
-                  });
+                  if (append) {
+                    await append({
+                      role: "user",
+                      content: suggestedAction.action,
+                    });
+                  }
                 }}
                 className="text-left border rounded-xl px-4 py-3.5 text-sm flex-1 gap-1 sm:flex-col w-full h-auto justify-start items-start"
               >
@@ -159,7 +144,7 @@ export function MultimodalInput({
       <Textarea
         ref={textareaRef}
         placeholder="Send a message..."
-        value={input}
+        value={input || ""}
         onChange={handleInput}
         className={cn(
           "min-h-[24px] max-h-[calc(75dvh)] overflow-hidden resize-none rounded-xl !text-base bg-muted",
@@ -194,7 +179,9 @@ export function MultimodalInput({
           onClick={(event) => {
             event.preventDefault();
             stop();
-            setMessages((messages) => sanitizeUIMessages(messages));
+            if (setMessages) {
+              setMessages((messages) => sanitizeUIMessages(messages));
+            }
           }}
         >
           <StopIcon size={14} />
@@ -206,7 +193,7 @@ export function MultimodalInput({
             event.preventDefault();
             submitForm();
           }}
-          disabled={input.length === 0}
+          disabled={!input || input.length === 0}
         >
           <ArrowUpIcon size={14} />
         </Button>

@@ -5,185 +5,126 @@ import { PreviewMessage, ThinkingMessage } from "@/components/message";
 import { MultimodalInput } from "@/components/multimodal-input";
 import { Overview } from "@/components/overview";
 import { useScrollToBottom } from "@/hooks/use-scroll-to-bottom";
-import { useADKWebSocket } from "@/hooks/useADKWebSocket";
 import { Message, CreateMessage, ChatRequestOptions } from "ai";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { useChat } from "@/hooks/use-chat";
+import { useLocalStorage } from "usehooks-ts";
 
 export function Chat() {
-  const chatId = "001";
+  const [mode, setMode] = useState<'search' | 'analytics'>('search');
+  const [localStorageInput, setLocalStorageInput] = useLocalStorage("input", "");
 
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState<string>("");
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-
-  const append = async (
-    message: Message | CreateMessage,
-    chatRequestOptions?: ChatRequestOptions
-  ) => {
-    setMessages((prev) => [...prev, message as Message]);
-    return message.id;
-  };
-
-  const stop = () => {
-    // Optionally implement stop signal over WebSocket later
-  };
-
-  const {
-    sendUserMessage,
-    startListening,
-    stopListening,
-    isConnected,
-    isRecording,
-  } = useADKWebSocket({
-    onTextMessage: (chunk: string, isFinal = false) => {
-      setMessages((prev) => {
-        const last = prev[prev.length - 1];
-  
-        // If we're recording, show interim results as user messages
-        if (isRecording && !isFinal) {
-          if (last?.role === "user") {
-            return [
-              ...prev.slice(0, -1),
-              { ...last, content: chunk },
-            ];
+  const { messages, input, handleInputChange, handleSubmit, isLoading, stop } = useChat({
+    api: mode === 'search' ? '/api/chat' : '/api/analytics',
+    onResponse: (response) => {
+      if (mode === 'analytics') {
+        // For analytics mode, we need to handle the non-streaming response
+        response.json().then((data) => {
+          if (data.error) {
+            toast.error(data.error);
           }
-          return [
-            ...prev,
-            {
-              id: `user-${Date.now()}`,
-              role: "user",
-              content: chunk,
-            },
-          ];
-        }
-  
-        // For non-recording messages (assistant responses)
-        if (!isRecording && last?.role === "assistant" && !isFinal) {
-  return [
-    ...prev.slice(0, -1),
-    { ...last, content: last.content + chunk },
-  ];
-}
-  
-        // Prevent assistant response from showing while still recording
-      if (!isRecording && chunk && !isFinal) {
-        return [
-          ...prev,
-          {
-            id: `assistant-${Date.now()}`,
-            role: "assistant",
-            content: chunk,
-          },
-        ];
-      }
-
-        return prev;
-      });
-  
-      if (isFinal) setIsLoading(false);
-    },
-    onTurnComplete: () => setIsLoading(false),
-    onAudioMessage: (buffer: ArrayBuffer) => {
-      try {
-        const audioContext = new AudioContext();
-        audioContext.decodeAudioData(buffer).then((decoded) => {
-          const source = audioContext.createBufferSource();
-          source.buffer = decoded;
-          source.connect(audioContext.destination);
-          source.start(0);
-        }).catch(err => {
-          console.error("[Audio] Failed to decode audio:", err);
         });
-      } catch (err) {
-        console.error("[Audio] Failed to create audio context:", err);
       }
     },
   });
 
+  // Initialize input from localStorage
   useEffect(() => {
-    if (!isConnected) {
-      toast.error("WebSocket connection lost. Attempting to reconnect...");
-    } else {
-      toast.success("WebSocket connected");
+    if (!input && localStorageInput) {
+      handleInputChange({ target: { value: localStorageInput } } as React.ChangeEvent<HTMLInputElement>);
     }
-  }, [isConnected]);
+  }, []);
 
-  const handleSubmit = (
-    event?: { preventDefault?: () => void },
-    chatRequestOptions?: ChatRequestOptions
-  ) => {
-    if (event?.preventDefault) {
-      event.preventDefault();
+  // Update localStorage when input changes
+  useEffect(() => {
+    if (input !== undefined) {
+      setLocalStorageInput(input);
     }
-    
-    if (!input.trim()) return;
+  }, [input, setLocalStorageInput]);
 
-    if (!isConnected) {
-      toast.error("Cannot send message: WebSocket is not connected");
-      return;
-    }
-
-    const userMessage: Message = {
-      id: `user-${Date.now()}`,
-      role: "user",
-      content: input,
-    };
-
-    append(userMessage);
-    sendUserMessage(input);
-    setInput("");
-    setIsLoading(true);
-  };
+  const chatId = "001";
 
   const [messagesContainerRef, messagesEndRef] =
     useScrollToBottom<HTMLDivElement>();
 
+  const handleAppend = async (
+    message: Message | CreateMessage,
+    chatRequestOptions?: ChatRequestOptions
+  ) => {
+    // This is a no-op since we're using the useChat hook
+    return message.id;
+  };
+
+  // Create a wrapper for setInput that matches the expected type
+  const handleSetInput = (value: string) => {
+    handleInputChange({ target: { value } } as React.ChangeEvent<HTMLInputElement>);
+  };
+
   return (
     <div className="flex flex-col min-w-0 h-[calc(100dvh-52px)] bg-background">
+      <div className="flex justify-center gap-4 mb-4 pt-4">
+        <Button
+          variant={mode === 'search' ? 'default' : 'outline'}
+          onClick={() => setMode('search')}
+        >
+          Search Mode
+        </Button>
+        <Button
+          variant={mode === 'analytics' ? 'default' : 'outline'}
+          onClick={() => setMode('analytics')}
+        >
+          Analytics Mode
+        </Button>
+      </div>
+
       <div
         ref={messagesContainerRef}
-        className="flex flex-col min-w-0 gap-6 flex-1 overflow-y-scroll pt-4"
+        className="flex flex-col min-w-0 gap-6 flex-1 overflow-y-scroll px-4"
       >
-        {messages.length === 0 && <Overview />}
-
-        {messages.map((message, index) => (
-          <PreviewMessage
-            key={message.id}
-            chatId={chatId}
-            message={message}
-            isLoading={isLoading && messages.length - 1 === index}
-          />
-        ))}
-
-        {isLoading &&
-          messages.length > 0 &&
-          messages[messages.length - 1].role === "user" && <ThinkingMessage />}
-
+        {messages.length === 0 ? (
+          <Overview />
+        ) : (
+          <>
+            {messages.map((message, i) => (
+              <div
+                key={i}
+                className={cn(
+                  "flex w-full items-start gap-4",
+                  message.role === "assistant" && "bg-muted/50"
+                )}
+              >
+                <div className="flex-1 space-y-2 overflow-hidden">
+                  {message.content}
+                </div>
+              </div>
+            ))}
+            {isLoading && <ThinkingMessage />}
+          </>
+        )}
         <div
           ref={messagesEndRef}
           className="shrink-0 min-w-[24px] min-h-[24px]"
         />
       </div>
 
-      <form
-        onSubmit={handleSubmit}
-        className="flex mx-auto px-4 bg-background pb-4 md:pb-6 gap-2 w-full md:max-w-3xl"
-      >
+      <div className="flex mx-auto px-4 bg-background pb-4 md:pb-6 gap-2 w-full md:max-w-3xl">
         <MultimodalInput
           chatId={chatId}
           input={input}
-          setInput={setInput}
-          handleSubmit={handleSubmit}
+          setInput={handleSetInput}
           isLoading={isLoading}
           stop={stop}
           messages={messages}
-          setMessages={setMessages}
-          append={append}
-          startListening={startListening}
-          stopListening={stopListening}
-          isRecording={isRecording}
+          setMessages={() => {}}
+          append={handleAppend}
+          handleSubmit={handleSubmit}
+          startListening={() => {}}
+          stopListening={() => {}}
+          isRecording={false}
         />
-      </form>
+      </div>
     </div>
   );
 }

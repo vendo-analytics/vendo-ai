@@ -37,7 +37,7 @@ export function Chat() {
     isConnected,
     isRecording,
   } = useADKWebSocket({
-    onTextMessage: (chunk: string, isFinal = false) => {
+    onTextMessage: (chunk: string, isFinal = false, isPartial = false) => {
       setMessages((prev) => {
         const last = prev[prev.length - 1];
   
@@ -61,14 +61,16 @@ export function Chat() {
   
         // For non-recording messages (assistant responses)
         if (!isRecording) {
-          if (last?.role === "assistant" && !isFinal) {
-            // Append to existing assistant message
+          // If we have an existing assistant message, update it
+          if (last?.role === "assistant") {
             return [
               ...prev.slice(0, -1),
-              { ...last, content: last.content + chunk },
+              { ...last, content: chunk },
             ];
-          } else if (chunk && !isFinal && (!last || last.role !== "assistant")) {
-            // Create new assistant message only if there isn't already one
+          }
+          
+          // Only create a new assistant message if we don't have one
+          if (chunk) {
             return [
               ...prev,
               {
@@ -167,7 +169,7 @@ export function Chat() {
       </div>
       <div
         ref={messagesContainerRef}
-        className="flex flex-col min-w-0 gap-6 flex-1 overflow-y-scroll pt-4"
+        className="flex flex-col min-w-0 gap-6 flex-1 overflow-y-auto scrollbar-hide pt-4"
       >
         {messages.length === 0 && <Overview />}
 

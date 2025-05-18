@@ -55,7 +55,7 @@ declare global {
 }
 
 interface Props {
-  onTextMessage: (textChunk: string, isFinal?: boolean, role?: "user" | "assistant") => void;
+  onTextMessage: (textChunk: string, isFinal?: boolean, isPartial?: boolean, role?: "user" | "assistant") => void;
   onAudioMessage?: (audioBuffer: ArrayBuffer) => void;
   onTurnComplete?: () => void;
   isAudioEnabled?: boolean;
@@ -169,13 +169,32 @@ export function useADKWebSocket({
             return;
           }
 
+          // Handle text messages
           if (data.mime_type === "text/plain") {
             // Let the Chat component handle the text display
-            onTextMessage(data.data, data.turn_complete);
+            onTextMessage(data.data, data.turn_complete, data.is_partial);
             
-            // If audio is enabled, also speak the text
-            if (callbacksRef.current.isAudioEnabled && 'speechSynthesis' in window) {
-              console.log("[WS] Speaking text:", data.data);
+            // If audio is enabled and this message should be spoken
+            if (data.is_speech && callbacksRef.current.isAudioEnabled && 'speechSynthesis' in window) {
+              // Only speak complete messages, not partial ones
+              if (!data.is_partial) {
+                console.log("[WS] Speaking text:", data.data);
+                // Cancel any ongoing speech
+                if (currentUtterance.current) {
+                  window.speechSynthesis.cancel();
+                }
+                
+                const utterance = new SpeechSynthesisUtterance(data.data);
+                currentUtterance.current = utterance;
+                window.speechSynthesis.speak(utterance);
+              }
+            } else {
+              console.log("[WS] Audio disabled or not marked for speech, not speaking");
+            }
+          } else if (data.mime_type === "text/speech" && callbacksRef.current.isAudioEnabled) {
+            // Only handle speech if audio is enabled and we haven't already spoken this text
+            if ('speechSynthesis' in window && data.data !== currentUtterance.current?.text) {
+              console.log("[WS] Speaking text from speech message:", data.data);
               // Cancel any ongoing speech
               if (currentUtterance.current) {
                 window.speechSynthesis.cancel();
@@ -184,8 +203,6 @@ export function useADKWebSocket({
               const utterance = new SpeechSynthesisUtterance(data.data);
               currentUtterance.current = utterance;
               window.speechSynthesis.speak(utterance);
-            } else {
-              console.log("[WS] Audio disabled, not speaking");
             }
           } else if (data.mime_type === "audio/pcm") {
             // Only handle audio messages if audio is enabled
@@ -332,7 +349,7 @@ export function useADKWebSocket({
         if (interimTranscript && interimTranscript !== interimMessageRef.current) {
           interimMessageRef.current = interimTranscript;
           // Show interim results as assistant message with isFinal=false
-          callbacksRef.current.onTextMessage(interimTranscript, false, "assistant");
+          callbacksRef.current.onTextMessage(interimTranscript, false, false, "assistant");
         }
 
         // Store the final transcript
@@ -364,7 +381,7 @@ export function useADKWebSocket({
           conversationHistory.current.push({ role: "user", content: finalText });
           
           // Clear any existing messages before sending
-          callbacksRef.current.onTextMessage("", true);
+          callbacksRef.current.onTextMessage("", true, false);
           
           if (ws.current?.readyState === WebSocket.OPEN) {
             // For audio messages, send with special flag and source

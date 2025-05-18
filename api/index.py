@@ -84,8 +84,6 @@ async def agent_to_client_messaging(websocket, live_events):
     """Agent to client communication"""
     try:
         print("[DEBUG] Starting agent_to_client_messaging")
-        print(f"[DEBUG] WebSocket state: {websocket.client_state}")
-        print(f"[DEBUG] Live events: {live_events}")
         
         async for event in live_events:
             print(f"[DEBUG] Processing event: {event}")
@@ -120,23 +118,28 @@ async def agent_to_client_messaging(websocket, live_events):
                         print(f"[AGENT TO CLIENT]: audio/pcm: {len(audio_data)} bytes.")
                         continue
 
-                # If it's text, send it and also send as speech
+                # If it's text, send it as a single message
                 if part.text:
-                    # Send as text
-                    text_message = {
-                        "mime_type": "text/plain",
-                        "data": part.text
-                    }
-                    await websocket.send_text(json.dumps(text_message))
-                    print(f"[AGENT TO CLIENT]: text/plain: {text_message}")
-                    
-                    # Also send as speech
-                    speech_message = {
-                        "mime_type": "text/speech",
-                        "data": part.text
-                    }
-                    await websocket.send_text(json.dumps(speech_message))
-                    print(f"[AGENT TO CLIENT]: text/speech: {speech_message}")
+                    # Only send if this is a partial message
+                    if event.partial:
+                        message = {
+                            "mime_type": "text/plain",
+                            "data": part.text,
+                            "is_speech": True,  # Flag to indicate this text should be spoken
+                            "is_partial": True  # Flag to indicate if this is a partial message
+                        }
+                        await websocket.send_text(json.dumps(message))
+                        print(f"[AGENT TO CLIENT]: text/plain (partial): {message}")
+                    else:
+                        # For complete messages, just send once
+                        message = {
+                            "mime_type": "text/plain",
+                            "data": part.text,
+                            "is_speech": True,  # Flag to indicate this text should be spoken
+                            "is_partial": False  # Flag to indicate if this is a partial message
+                        }
+                        await websocket.send_text(json.dumps(message))
+                        print(f"[AGENT TO CLIENT]: text/plain (complete): {message}")
             except Exception as e:
                 print(f"[AGENT TO CLIENT] Error processing event: {e}")
                 # Send error message to client

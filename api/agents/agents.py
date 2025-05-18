@@ -185,6 +185,6 @@ root_agent = Agent(
     instruction=ROOT_AGENT_INSTRUCTION,
     tools=[google_search,
          query_bigquery
-    ], # Enable tool output formatting
+    ]# Enable tool output formatting
 )
 

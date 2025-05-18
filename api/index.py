@@ -83,64 +83,73 @@ def start_agent_session(session_id, is_audio=False):
 async def agent_to_client_messaging(websocket, live_events):
     """Agent to client communication"""
     try:
+        print("[DEBUG] Starting agent_to_client_messaging")
+        print(f"[DEBUG] WebSocket state: {websocket.client_state}")
+        print(f"[DEBUG] Live events: {live_events}")
         
-        while True:
-            
-            async for event in live_events:
-                
-                try:
-                    # If the turn complete or interrupted, send it
-                    if event.turn_complete or event.interrupted:
-                        message = {
-                            "turn_complete": event.turn_complete,
-                            "interrupted": event.interrupted,
-                        }
-                        await websocket.send_text(json.dumps(message))
-                        print(f"[AGENT TO CLIENT]: {message}", flush=True)
-                        continue
-
-                    # Read the Content and its first Part
-                    part: Part = (
-                        event.content and event.content.parts and event.content.parts[0]
-                    )
-                    if not part:
-                        continue
-
-                    # If it's audio, send Base64 encoded audio data
-                    is_audio = part.inline_data and part.inline_data.mime_type.startswith("audio/pcm")
-                    if is_audio:
-                        audio_data = part.inline_data and part.inline_data.data
-                        if audio_data:
-                            message = {
-                                "mime_type": "audio/pcm",
-                                "data": base64.b64encode(audio_data).decode("ascii")
-                            }
-                            await websocket.send_text(json.dumps(message))
-                            print(f"[AGENT TO CLIENT]: audio/pcm: {len(audio_data)} bytes.")
-                            continue
-
-                    # If it's text and a parial text, send it
-                    if part.text and event.partial:
-                    
-                        message = {
-                            "mime_type": "text/plain",
-                            "data": part.text
-                        }
-                        await websocket.send_text(json.dumps(message))
-                        print(f"[AGENT TO CLIENT]: text/plain: {message}")
-                except Exception as e:
-                    print(f"[AGENT TO CLIENT] Error processing event: {e}")
-                    # Send error message to client
-                    error_message = {
-                        "mime_type": "text/plain",
-                        "data": f"Error: {str(e)}",
-                        "error": True
+        async for event in live_events:
+            print(f"[DEBUG] Processing event: {event}")
+            try:
+                # If the turn complete or interrupted, send it
+                if event.turn_complete or event.interrupted:
+                    message = {
+                        "turn_complete": event.turn_complete,
+                        "interrupted": event.interrupted,
                     }
-                    await websocket.send_text(json.dumps(error_message))
-                    if "quota" in str(e).lower():
-                        # Send turn complete to allow client to retry
-                        await websocket.send_text(json.dumps({"turn_complete": True}))
-                        return  # Exit the loop on quota error
+                    await websocket.send_text(json.dumps(message))
+                    print(f"[AGENT TO CLIENT]: {message}")
+                    continue
+
+                # Read the Content and its first Part
+                part: Part = (
+                    event.content and event.content.parts and event.content.parts[0]
+                )
+                if not part:
+                    continue
+
+                # If it's audio, send Base64 encoded audio data
+                is_audio = part.inline_data and part.inline_data.mime_type.startswith("audio/pcm")
+                if is_audio:
+                    audio_data = part.inline_data and part.inline_data.data
+                    if audio_data:
+                        message = {
+                            "mime_type": "audio/pcm",
+                            "data": base64.b64encode(audio_data).decode("ascii")
+                        }
+                        await websocket.send_text(json.dumps(message))
+                        print(f"[AGENT TO CLIENT]: audio/pcm: {len(audio_data)} bytes.")
+                        continue
+
+                # If it's text, send it and also send as speech
+                if part.text:
+                    # Send as text
+                    text_message = {
+                        "mime_type": "text/plain",
+                        "data": part.text
+                    }
+                    await websocket.send_text(json.dumps(text_message))
+                    print(f"[AGENT TO CLIENT]: text/plain: {text_message}")
+                    
+                    # Also send as speech
+                    speech_message = {
+                        "mime_type": "text/speech",
+                        "data": part.text
+                    }
+                    await websocket.send_text(json.dumps(speech_message))
+                    print(f"[AGENT TO CLIENT]: text/speech: {speech_message}")
+            except Exception as e:
+                print(f"[AGENT TO CLIENT] Error processing event: {e}")
+                # Send error message to client
+                error_message = {
+                    "mime_type": "text/plain",
+                    "data": f"Error: {str(e)}",
+                    "error": True
+                }
+                await websocket.send_text(json.dumps(error_message))
+                if "quota" in str(e).lower():
+                    # Send turn complete to allow client to retry
+                    await websocket.send_text(json.dumps({"turn_complete": True}))
+                    return  # Exit the loop on quota error
     except Exception as e:
         print(f"[AGENT TO CLIENT] Fatal error: {e}")
         try:

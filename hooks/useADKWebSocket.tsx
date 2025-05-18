@@ -54,12 +54,13 @@ declare global {
   }
 }
 
-type Props = {
+interface Props {
   onTextMessage: (textChunk: string, isFinal?: boolean, role?: "user" | "assistant") => void;
-
   onAudioMessage?: (audioBuffer: ArrayBuffer) => void;
   onTurnComplete?: () => void;
-};
+  isAudioEnabled?: boolean;
+  setIsAudioEnabled?: (enabled: boolean) => void;
+}
 
 interface Message {
   role: "user" | "assistant";
@@ -70,9 +71,14 @@ export function useADKWebSocket({
   onTextMessage,
   onAudioMessage,
   onTurnComplete,
+  isAudioEnabled = true,
+  setIsAudioEnabled,
 }: Props) {
   const ws = useRef<WebSocket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const currentUtterance = useRef<SpeechSynthesisUtterance | null>(null);
   const reconnectTimeout = useRef<NodeJS.Timeout>();
   const reconnectAttempts = useRef(0);
   const MAX_RECONNECT_ATTEMPTS = 5;
@@ -94,6 +100,8 @@ export function useADKWebSocket({
     onTextMessage,
     onAudioMessage,
     onTurnComplete,
+    isAudioEnabled,
+    setIsAudioEnabled,
   });
 
   // Update callbacks without triggering reconnection
@@ -102,8 +110,11 @@ export function useADKWebSocket({
       onTextMessage,
       onAudioMessage,
       onTurnComplete,
+      isAudioEnabled,
+      setIsAudioEnabled,
     };
-  }, [onTextMessage, onAudioMessage, onTurnComplete]);
+    console.log("[WS] Audio state updated:", isAudioEnabled);
+  }, [onTextMessage, onAudioMessage, onTurnComplete, isAudioEnabled, setIsAudioEnabled]);
 
   const connect = useCallback(() => {
     if (ws.current?.readyState === WebSocket.OPEN) {
@@ -141,58 +152,62 @@ export function useADKWebSocket({
 
       socket.onmessage = (event) => {
         try {
-          console.log(event)
-          const message = JSON.parse(event.data);
-          
+          const data = JSON.parse(event.data);
+          console.log("[WS] Received message:", data);
+
           // Handle turn completion first
-          if (message.turn_complete) {
-            console.log("[WS] Turn complete received");
-            callbacksRef.current.onTextMessage("", true); // Mark final message complete
-            
-            if (callbacksRef.current.onTurnComplete) {
-              callbacksRef.current.onTurnComplete();
-            }
+          if (data.turn_complete) {
+            console.log("[WS] Turn complete");
+            setIsProcessing(false);
+            onTurnComplete?.();
             return;
           }
-        
-          
+
           // Ensure message has mime_type
-          if (!message.mime_type) {
-            message.mime_type = "text/plain";
+          if (!data.mime_type) {
+            console.warn("[WS] Message missing mime_type:", data);
+            return;
           }
 
-          // Handle text
-          if (message.mime_type === "text/plain") {
-            // If this is a tool output, format it nicely
-            if (message.tool_output) {
-              const toolName = message.tool_name || "Tool";
-              const output = message.data;
-              
-              // Format the tool output with a header
-              const formattedOutput = `🔍 ${toolName} Results:\n${output}`;
-              
-              callbacksRef.current.onTextMessage(formattedOutput, false);
-            } else {
-              // Regular message
-              callbacksRef.current.onTextMessage(message.data, false);
-            }
-          }
-
-          // Handle audio (optional)
-          else if (message.mime_type === "audio/pcm" && callbacksRef.current.onAudioMessage) {
-            try {
-              const binary = atob(message.data);
-              const buffer = new Uint8Array(binary.length);
-              for (let i = 0; i < binary.length; i++) {
-                buffer[i] = binary.charCodeAt(i);
+          if (data.mime_type === "text/plain") {
+            // Let the Chat component handle the text display
+            onTextMessage(data.data, data.turn_complete);
+            
+            // If audio is enabled, also speak the text
+            if (callbacksRef.current.isAudioEnabled && 'speechSynthesis' in window) {
+              console.log("[WS] Speaking text:", data.data);
+              // Cancel any ongoing speech
+              if (currentUtterance.current) {
+                window.speechSynthesis.cancel();
               }
-              callbacksRef.current.onAudioMessage(buffer.buffer);
-            } catch (err) {
-              console.error("[WS] Failed to decode audio:", err);
+              
+              const utterance = new SpeechSynthesisUtterance(data.data);
+              currentUtterance.current = utterance;
+              window.speechSynthesis.speak(utterance);
+            } else {
+              console.log("[WS] Audio disabled, not speaking");
             }
+          } else if (data.mime_type === "audio/pcm" && callbacksRef.current.isAudioEnabled) {
+            // Only handle audio messages if audio is enabled
+            console.log("[WS] Playing PCM audio");
+            const audioData = atob(data.data);
+            const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const audioBuffer = audioContext.createBuffer(1, audioData.length, 44100);
+            const channelData = audioBuffer.getChannelData(0);
+            
+            for (let i = 0; i < audioData.length; i++) {
+              channelData[i] = (audioData.charCodeAt(i) - 128) / 128.0;
+            }
+            
+            const source = audioContext.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(audioContext.destination);
+            source.start();
+          } else if (data.mime_type === "audio/pcm") {
+            console.log("[WS] Audio disabled, not playing PCM");
           }
-        } catch (err) {
-          console.error("[WS] Failed to parse message:", err);
+        } catch (error) {
+          console.error("[WS] Error processing message:", error);
         }
       };
 
@@ -480,5 +495,13 @@ export function useADKWebSocket({
     };
   }, [stopListening]);
 
-  return { sendUserMessage, isConnected, startListening, stopListening, isRecording };
+  return { 
+    sendUserMessage, 
+    isConnected, 
+    startListening, 
+    stopListening, 
+    isRecording,
+    isAudioEnabled,
+    setIsAudioEnabled: setIsAudioEnabled || (() => {}) // Provide a no-op function if not provided
+  };
 }

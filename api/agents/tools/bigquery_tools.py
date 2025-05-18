@@ -15,8 +15,7 @@ def query_bigquery(query: str):
             scopes=['https://www.googleapis.com/auth/cloud-platform']
         )
     try:
-        print("HERE")
-        print(query)
+
         client = bigquery.Client(credentials=credentials)
         job_config = bigquery.QueryJobConfig()
         event_data_df = client.query(query, job_config=job_config).to_dataframe()

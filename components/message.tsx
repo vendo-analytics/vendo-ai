@@ -17,9 +17,8 @@ export const PreviewMessage = ({
   isLoading: boolean;
 }) => {
   return (
-
     <motion.div
-      className="w-full mx-auto max-w-3xl px-4 group/message"
+      className="w-full mx-auto px-4 group/message"
       initial={{ y: 5, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       data-role={message.role}

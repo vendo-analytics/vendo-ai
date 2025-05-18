@@ -187,24 +187,26 @@ export function useADKWebSocket({
             } else {
               console.log("[WS] Audio disabled, not speaking");
             }
-          } else if (data.mime_type === "audio/pcm" && callbacksRef.current.isAudioEnabled) {
-            // Only handle audio messages if audio is enabled
-            console.log("[WS] Playing PCM audio");
-            const audioData = atob(data.data);
-            const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-            const audioBuffer = audioContext.createBuffer(1, audioData.length, 44100);
-            const channelData = audioBuffer.getChannelData(0);
-            
-            for (let i = 0; i < audioData.length; i++) {
-              channelData[i] = (audioData.charCodeAt(i) - 128) / 128.0;
-            }
-            
-            const source = audioContext.createBufferSource();
-            source.buffer = audioBuffer;
-            source.connect(audioContext.destination);
-            source.start();
           } else if (data.mime_type === "audio/pcm") {
-            console.log("[WS] Audio disabled, not playing PCM");
+            // Only handle audio messages if audio is enabled
+            if (callbacksRef.current.isAudioEnabled) {
+              console.log("[WS] Playing PCM audio");
+              const audioData = atob(data.data);
+              const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+              const audioBuffer = audioContext.createBuffer(1, audioData.length, 44100);
+              const channelData = audioBuffer.getChannelData(0);
+              
+              for (let i = 0; i < audioData.length; i++) {
+                channelData[i] = (audioData.charCodeAt(i) - 128) / 128.0;
+              }
+              
+              const source = audioContext.createBufferSource();
+              source.buffer = audioBuffer;
+              source.connect(audioContext.destination);
+              source.start();
+            } else {
+              console.log("[WS] Audio disabled, not playing PCM");
+            }
           }
         } catch (error) {
           console.error("[WS] Error processing message:", error);

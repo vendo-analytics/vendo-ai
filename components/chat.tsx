@@ -60,23 +60,24 @@ export function Chat() {
         }
   
         // For non-recording messages (assistant responses)
-        if (!isRecording && last?.role === "assistant" && !isFinal) {
-          return [
-            ...prev.slice(0, -1),
-            { ...last, content: last.content + chunk },
-          ];
-        }
-  
-        // Prevent assistant response from showing while still recording
-        if (!isRecording && chunk && !isFinal) {
-          return [
-            ...prev,
-            {
-              id: `assistant-${Date.now()}`,
-              role: "assistant",
-              content: chunk,
-            },
-          ];
+        if (!isRecording) {
+          if (last?.role === "assistant" && !isFinal) {
+            // Append to existing assistant message
+            return [
+              ...prev.slice(0, -1),
+              { ...last, content: last.content + chunk },
+            ];
+          } else if (chunk && !isFinal && (!last || last.role !== "assistant")) {
+            // Create new assistant message only if there isn't already one
+            return [
+              ...prev,
+              {
+                id: `assistant-${Date.now()}`,
+                role: "assistant",
+                content: chunk,
+              },
+            ];
+          }
         }
 
         return prev;
@@ -133,7 +134,7 @@ export function Chat() {
     useScrollToBottom<HTMLDivElement>();
 
   return (
-    <div className="flex flex-col min-w-0 h-[calc(100dvh-52px)] bg-background">
+    <div className="flex flex-col min-w-0 h-[calc(100dvh-52px)] bg-background max-w-3xl mx-auto">
       <div className="flex justify-between items-center p-4 border-b">
         <h1 className="text-xl font-bold">Chat</h1>
         <div className="flex items-center gap-2">

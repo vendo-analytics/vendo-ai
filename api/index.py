@@ -83,10 +83,11 @@ def start_agent_session(session_id, is_audio=False):
 async def agent_to_client_messaging(websocket, live_events):
     """Agent to client communication"""
     try:
-        print("[DEBUG] Starting agent_to_client_messaging")
+        print("[DEBUG] Starting agent_to_client_messaging", flush=True)
+        is_recording = False  # Track recording state
         
         async for event in live_events:
-            print(f"[DEBUG] Processing event: {event}")
+            print(f"[DEBUG] Processing event: {event}", flush=True)
             try:
                 # If the turn complete or interrupted, send it
                 if event.turn_complete or event.interrupted:
@@ -95,7 +96,12 @@ async def agent_to_client_messaging(websocket, live_events):
                         "interrupted": event.interrupted,
                     }
                     await websocket.send_text(json.dumps(message))
-                    print(f"[AGENT TO CLIENT]: {message}")
+                    print(f"[AGENT TO CLIENT]: {message}", flush=True)
+                    continue
+
+                # Skip agent responses if we're recording
+                if is_recording:
+                    print("[DEBUG] Skipping agent response during recording", flush=True)
                     continue
 
                 # Read the Content and its first Part
@@ -115,7 +121,7 @@ async def agent_to_client_messaging(websocket, live_events):
                             "data": base64.b64encode(audio_data).decode("ascii")
                         }
                         await websocket.send_text(json.dumps(message))
-                        print(f"[AGENT TO CLIENT]: audio/pcm: {len(audio_data)} bytes.")
+                        print(f"[AGENT TO CLIENT]: audio/pcm: {len(audio_data)} bytes.", flush=True)
                         continue
 
                 # If it's text, send it as a single message
@@ -129,7 +135,7 @@ async def agent_to_client_messaging(websocket, live_events):
                             "is_partial": True  # Flag to indicate if this is a partial message
                         }
                         await websocket.send_text(json.dumps(message))
-                        print(f"[AGENT TO CLIENT]: text/plain (partial): {message}")
+                        print(f"[AGENT TO CLIENT]: text/plain (partial): {message}", flush=True)
                     else:
                         # For complete messages, just send once
                         message = {
@@ -139,9 +145,9 @@ async def agent_to_client_messaging(websocket, live_events):
                             "is_partial": False  # Flag to indicate if this is a partial message
                         }
                         await websocket.send_text(json.dumps(message))
-                        print(f"[AGENT TO CLIENT]: text/plain (complete): {message}")
+                        print(f"[AGENT TO CLIENT]: text/plain (complete): {message}", flush=True)
             except Exception as e:
-                print(f"[AGENT TO CLIENT] Error processing event: {e}")
+                print(f"[AGENT TO CLIENT] Error processing event: {e}", flush=True)
                 # Send error message to client
                 error_message = {
                     "mime_type": "text/plain",
@@ -154,7 +160,7 @@ async def agent_to_client_messaging(websocket, live_events):
                     await websocket.send_text(json.dumps({"turn_complete": True}))
                     return  # Exit the loop on quota error
     except Exception as e:
-        print(f"[AGENT TO CLIENT] Fatal error: {e}")
+        print(f"[AGENT TO CLIENT] Fatal error: {e}", flush=True)
         try:
             error_message = {
                 "mime_type": "text/plain",
@@ -172,32 +178,40 @@ async def client_to_agent_messaging(websocket, live_request_queue):
     try:
         while True:
             try:
-                
                 # Decode JSON message
-                try:
-                    message_json = await websocket.receive_text()
-                except Exception as e:
-                    print(f"Received non-text frame: {e}")
-                    await websocket.close(code=1003)  # Unsupported Data
-                    return
-                #message_json = await websocket.receive_text()
-                
-                print(message_json, flush=True)
-                
+                message_json = await websocket.receive_text()
+                print(f"[CLIENT TO AGENT] RAW: {message_json}", flush=True)
                 message = json.loads(message_json)
+                
+                # Defensive check: skip and log any messages without 'mime_type'
+                if "mime_type" not in message:
+                    print(f"[CLIENT TO AGENT] Received message without mime_type: {message}", flush=True)
+                    continue
+                
                 mime_type = message["mime_type"]
                 
                 data = message["data"]
                 if data == '':
                     data = 'hi'
-                
+
+                # Update recording state based on message type
+                if mime_type == "text/plain" and "source" in message and message["source"] == "audio":
+                    # This is a recording start/stop message
+                    is_recording = message.get("is_recording", False)
+                    print(f"[DEBUG] Recording state changed to: {is_recording}", flush=True)
+                    # Do NOT send this to the agent!
+                    continue
+
+                # Only set data = 'hi' for real user messages
+                if data == '' and not ("source" in message and message["source"] == "audio"):
+                    data = 'hi'
 
                 # Send the message to the agent
                 if mime_type == "text/plain":
                     # Send a text message
                     content = Content(role="user", parts=[Part.from_text(text=data)])
                     live_request_queue.send_content(content=content)
-                    print(f"[CLIENT TO AGENT]: {data}")
+                    print(f"[CLIENT TO AGENT]: {data}", flush=True)
                 elif mime_type == "audio/pcm":
                     # Send an audio data
                     decoded_data = base64.b64decode(data)
@@ -205,7 +219,7 @@ async def client_to_agent_messaging(websocket, live_request_queue):
                 else:
                     raise ValueError(f"Mime type not supported: {mime_type}")
             except Exception as e:
-                print(f"[CLIENT TO AGENT] Error processing message: {e}")
+                print(f"[CLIENT TO AGENT] Error processing message: {e}", flush=True)
                 # Send error message to client
                 error_message = {
                     "mime_type": "text/plain",
@@ -217,7 +231,7 @@ async def client_to_agent_messaging(websocket, live_request_queue):
                 if "quota" in str(e).lower():
                     return  # Exit the loop on quota error
     except Exception as e:
-        print(f"[CLIENT TO AGENT] Fatal error: {e}")
+        print(f"[CLIENT TO AGENT] Fatal error: {e}", flush=True)
         try:
             error_message = {
                 "mime_type": "text/plain",
@@ -243,7 +257,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, is_audio: st
     try:
         # Wait for client connection
         await websocket.accept()
-        print(f"Client #{session_id} connected, audio mode: {is_audio}")
+        print(f"Client #{session_id} connected, audio mode: {is_audio}", flush=True)
 
         # Start agent session
         session_id = str(session_id)
@@ -261,7 +275,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, is_audio: st
         try:
             await asyncio.gather(agent_to_client_task, client_to_agent_task)
         except Exception as e:
-            print(f"Error in websocket tasks: {e}")
+            print(f"Error in websocket tasks: {e}", flush=True)
             # Send error message to client
             error_message = {
                 "mime_type": "text/plain",
@@ -271,7 +285,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, is_audio: st
             await websocket.send_text(json.dumps(error_message))
             await websocket.send_text(json.dumps({"turn_complete": True}))
     except Exception as e:
-        print(f"Error in websocket endpoint: {e}")
+        print(f"Error in websocket endpoint: {e}", flush=True)
     finally:
         # Disconnected
-        print(f"Client #{session_id} disconnected")
+        print(f"Client #{session_id} disconnected", flush=True)

@@ -37,40 +37,38 @@ export function Chat() {
     isConnected,
     isRecording,
   } = useADKWebSocket({
-    onTextMessage: (chunk: string, isFinal = false, isPartial = false) => {
+    onTextMessage: (chunk: string, isFinal = false, isPartial = false, role?: "user" | "assistant") => {
       setMessages((prev) => {
+        if (!chunk) return prev;
         const last = prev[prev.length - 1];
   
-        // If we're recording, show interim results as user messages
-        if (isRecording && !isFinal) {
+        if (role === "user") {
           if (last?.role === "user") {
+            // Update the last user message
             return [
               ...prev.slice(0, -1),
               { ...last, content: chunk },
             ];
+          } else {
+            // Always append a new user message if last is not a user
+            return [
+              ...prev,
+              {
+                id: `user-${Date.now()}`,
+                role: "user",
+                content: chunk,
+              },
+            ];
           }
-          return [
-            ...prev,
-            {
-              id: `user-${Date.now()}`,
-              role: "user",
-              content: chunk,
-            },
-          ];
-        }
-  
-        // For non-recording messages (assistant responses)
-        if (!isRecording) {
-          // If we have an existing assistant message, update it
+        } else if (role === "assistant") {
           if (last?.role === "assistant") {
+            // Update the last assistant message
             return [
               ...prev.slice(0, -1),
               { ...last, content: chunk },
             ];
-          }
-          
-          // Only create a new assistant message if we don't have one
-          if (chunk) {
+          } else {
+            // Always append a new assistant message if last is not an assistant
             return [
               ...prev,
               {

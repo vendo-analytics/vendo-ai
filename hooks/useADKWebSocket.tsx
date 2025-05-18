@@ -172,7 +172,7 @@ export function useADKWebSocket({
           // Handle text messages
           if (data.mime_type === "text/plain") {
             // Let the Chat component handle the text display
-            onTextMessage(data.data, data.turn_complete, data.is_partial);
+            onTextMessage(data.data, data.turn_complete, data.is_partial, "assistant");
             
             // If audio is enabled and this message should be spoken
             if (data.is_speech && callbacksRef.current.isAudioEnabled && 'speechSynthesis' in window) {
@@ -345,11 +345,10 @@ export function useADKWebSocket({
           }
         }
 
-        // Only update the UI with interim results as assistant message
+        // Only update the UI with interim results as user message
         if (interimTranscript && interimTranscript !== interimMessageRef.current) {
           interimMessageRef.current = interimTranscript;
-          // Show interim results as assistant message with isFinal=false
-          callbacksRef.current.onTextMessage(interimTranscript, false, false, "assistant");
+          callbacksRef.current.onTextMessage(interimTranscript, false, false, "user");
         }
 
         // Store the final transcript
@@ -377,37 +376,22 @@ export function useADKWebSocket({
           interimMessageRef.current = "";
           stoppedManuallyRef.current = false;
           
-          // Add user message to conversation history
-          conversationHistory.current.push({ role: "user", content: finalText });
-          
-          // Clear any existing messages before sending
-          callbacksRef.current.onTextMessage("", true, false);
-          
-          if (ws.current?.readyState === WebSocket.OPEN) {
-            // For audio messages, send with special flag and source
-            ws.current.send(JSON.stringify({
-              mime_type: "text/plain",
-              data: finalText,
-              history: conversationHistory.current,
-              source: "audio",  // Indicate this is from audio input
-              is_audio: true,   // Legacy flag for backward compatibility
-              is_final: true    // Indicate this is the final transcript
-            }));
+          if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+            // TEMP: Clear history for this message only
+            conversationHistory.current = [];
+            try {
+              ws.current.send(JSON.stringify({
+                mime_type: "text/plain",
+                data: finalText,
+                history: conversationHistory.current
+              }));
+              console.log("[WS] Sent finalText to server with empty history:", finalText);
+            } catch (err) {
+              console.error("[WS] Error sending finalText to server with empty history:", err);
+            }
+            // After confirming this works, remove the line above to restore full history for subsequent messages
           } else {
-            // If WebSocket is not open, try to reconnect and send
-            connect();
-            setTimeout(() => {
-              if (ws.current?.readyState === WebSocket.OPEN) {
-                ws.current.send(JSON.stringify({
-                  mime_type: "text/plain",
-                  data: finalText,
-                  history: conversationHistory.current,
-                  source: "audio",  // Indicate this is from audio input
-                  is_audio: true,   // Legacy flag for backward compatibility
-                  is_final: true    // Indicate this is the final transcript
-                }));
-              }
-            }, 1000);
+            console.log("[WS] WebSocket not open, cannot send finalText. ws.readyState:", ws.current?.readyState);
           }
         }
         // Only restart recognition if we're still recording
@@ -452,6 +436,15 @@ export function useADKWebSocket({
       };
       
       setIsRecording(true);
+      // Send recording state to server
+      if (ws.current?.readyState === WebSocket.OPEN) {
+        ws.current.send(JSON.stringify({
+          mime_type: "text/plain",
+          data: "",
+          source: "audio",
+          is_recording: true
+        }));
+      }
       console.log("[Audio] Started recording");
     } catch (err) {
       console.error("[Audio] Failed to start recording:", err);
@@ -462,6 +455,16 @@ export function useADKWebSocket({
   const stopListening = useCallback(() => {
     setIsRecording(false);
     stoppedManuallyRef.current = true;
+
+    // Send recording state to server
+    if (ws.current?.readyState === WebSocket.OPEN) {
+      ws.current.send(JSON.stringify({
+        mime_type: "text/plain",
+        data: "",
+        source: "audio",
+        is_recording: false
+      }));
+    }
 
     // If recognition is running, stop it and wait for onend to fire
     if (recognitionRef.current) {

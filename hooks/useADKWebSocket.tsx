@@ -365,18 +365,18 @@ export function useADKWebSocket({
         let interimTranscript = '';
         let finalTranscript = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalTranscript += transcript + ' ';
-          } else {
-            interimTranscript += transcript;
-          }
+            const transcript = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+                finalTranscript += transcript + ' ';
+            } else {
+                interimTranscript += transcript;
+            }
         }
         
         // Update our refs with the latest transcripts
         if (finalTranscript) {
-          finalTranscriptRef.current += finalTranscript.trim() + ' ';
-          console.log("[Speech] Added to final transcript:", finalTranscript.trim());
+            finalTranscriptRef.current += finalTranscript.trim() + ' ';
+            console.log("[Speech] Added to final transcript:", finalTranscript.trim());
         }
         interimTranscriptRef.current = interimTranscript;
         console.log("[Speech] Current interim transcript:", interimTranscript);
@@ -405,25 +405,21 @@ export function useADKWebSocket({
         
         // Only send the message if we stopped manually (user pressed stop)
         if (stoppedManuallyRef.current && finalTranscriptRef.current.trim()) {
-          const finalText = finalTranscriptRef.current.trim();
-          finalTranscriptRef.current = "";
-          interimTranscriptRef.current = "";
-          stoppedManuallyRef.current = false;
-          
-          // Use the sendMessage function instead of directly accessing ws.current
-          sendMessage({
-            mime_type: "text/plain",
-            data: finalText,
-            history: conversationHistory.current
-          });
+            const finalText = finalTranscriptRef.current.trim();
+            finalTranscriptRef.current = "";
+            interimTranscriptRef.current = "";
+            stoppedManuallyRef.current = false;
+            
+            // Use sendUserMessage instead of sendMessage
+            sendUserMessage(finalText);
         } else {
-          console.log("[Speech] Not sending - Manual stop:", stoppedManuallyRef.current, "Final transcript:", finalTranscriptRef.current);
+            console.log("[Speech] Not sending - Manual stop:", stoppedManuallyRef.current, "Final transcript:", finalTranscriptRef.current);
         }
         
         // Always restart recognition if still recording
         if (isRecording) {
-          console.log("[Speech] Still recording, restarting recognition");
-          recognition.start();
+            console.log("[Speech] Still recording, restarting recognition");
+            recognition.start();
         }
       };
 
@@ -459,7 +455,7 @@ export function useADKWebSocket({
       console.error("[Audio] Failed to start recording:", err);
       stopListening(); // Clean up if there's an error
     }
-  }, [isRecording, sendMessage]);
+  }, [isRecording, sendMessage, sendUserMessage]);
 
   const stopListening = useCallback(() => {
     setIsRecording(false);

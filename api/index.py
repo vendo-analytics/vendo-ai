@@ -156,7 +156,7 @@ async def agent_to_client_messaging(websocket, live_events, user_id):
                         response_count += 1
                         last_response_time = current_time
                         # Wait a short time to see if more responses are coming
-                        await asyncio.sleep(0.5)
+                        await asyncio.sleep(1)
                         
                         # If no new responses have come in after waiting, this is truly the final one
                         if current_time == last_response_time:

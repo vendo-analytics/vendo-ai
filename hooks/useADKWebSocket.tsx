@@ -120,9 +120,9 @@ export function useADKWebSocket({
     if (ws.current?.readyState === WebSocket.OPEN) {
       return;
     }
-
+    const userId = "001"; // You can randomize or parametrize this
     const sessionId = "001"; // You can randomize or parametrize this
-    const wsUrl = `ws://localhost:8000/ws/${sessionId}?is_audio=false`; // Always start in text mode
+    const wsUrl = `ws://localhost:8000/ws/${sessionId}?user_id=${userId}&is_audio=false`;
     
     try {
       const socket = new WebSocket(wsUrl);
@@ -314,8 +314,14 @@ export function useADKWebSocket({
   }, []);
 
   const startListening = useCallback(async () => {
+    // Stop any ongoing speech synthesis
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+
     if (isRecording) {
-      stopListening();
+      // Only allow user to stop recording by pressing the mic button
+      // Do not call stopListening() automatically here
       return;
     }
 
@@ -370,14 +376,12 @@ export function useADKWebSocket({
       };
 
       recognition.onend = () => {
-        // Only send the message if we stopped manually
+        // Only send the message if we stopped manually (user pressed stop)
         if (stoppedManuallyRef.current && interimMessageRef.current) {
           const finalText = interimMessageRef.current;
           interimMessageRef.current = "";
           stoppedManuallyRef.current = false;
-          
           if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-            // TEMP: Clear history for this message only
             conversationHistory.current = [];
             try {
               ws.current.send(JSON.stringify({
@@ -389,12 +393,11 @@ export function useADKWebSocket({
             } catch (err) {
               console.error("[WS] Error sending finalText to server with empty history:", err);
             }
-            // After confirming this works, remove the line above to restore full history for subsequent messages
           } else {
             console.log("[WS] WebSocket not open, cannot send finalText. ws.readyState:", ws.current?.readyState);
           }
         }
-        // Only restart recognition if we're still recording
+        // Always restart recognition if still recording, but do NOT send message
         if (isRecording) {
           recognition.start();
         }
@@ -439,7 +442,7 @@ export function useADKWebSocket({
       // Send recording state to server
       if (ws.current?.readyState === WebSocket.OPEN) {
         ws.current.send(JSON.stringify({
-          mime_type: "text/plain",
+          mime_type: "audio/state",
           data: "",
           source: "audio",
           is_recording: true
@@ -454,12 +457,12 @@ export function useADKWebSocket({
 
   const stopListening = useCallback(() => {
     setIsRecording(false);
-    stoppedManuallyRef.current = true;
+    stoppedManuallyRef.current = true; // Only set this here, on explicit user action
 
     // Send recording state to server
     if (ws.current?.readyState === WebSocket.OPEN) {
       ws.current.send(JSON.stringify({
-        mime_type: "text/plain",
+        mime_type: "audio/state",
         data: "",
         source: "audio",
         is_recording: false
@@ -473,21 +476,7 @@ export function useADKWebSocket({
     } else {
       // If recognition is already ended (due to silence), do NOT send the transcript
       // Only send if the user manually stops recording by pressing the mic button
-      if (interimMessageRef.current) {
-        const finalText = interimMessageRef.current;
-        interimMessageRef.current = "";
-        stoppedManuallyRef.current = false;
-        if (ws.current?.readyState === WebSocket.OPEN) {
-          sendUserMessage(finalText);
-        } else {
-          connect();
-          setTimeout(() => {
-            if (ws.current?.readyState === WebSocket.OPEN) {
-              sendUserMessage(finalText);
-            }
-          }, 1000);
-        }
-      }
+      // (No action needed here)
     }
 
     // Stop audio processing

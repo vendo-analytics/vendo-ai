@@ -67,6 +67,16 @@ interface Message {
   content: string;
 }
 
+// Helper to safely encode large Uint8Arrays to base64
+function uint8ToBase64(uint8: Uint8Array) {
+  let result = '';
+  const CHUNK_SIZE = 0x4000; // 16k
+  for (let i = 0; i < uint8.length; i += CHUNK_SIZE) {
+    result += String.fromCharCode.apply(null, uint8.subarray(i, i + CHUNK_SIZE) as any);
+  }
+  return btoa(result);
+}
+
 export function useADKWebSocket({
   onTextMessage,
   onAudioMessage,
@@ -94,6 +104,11 @@ export function useADKWebSocket({
   const interimMessageRef = useRef<string>("");
   const stoppedManuallyRef = useRef(false);
   const conversationHistory = useRef<Message[]>([]);
+  const bufferedTranscriptRef = useRef<string>("");
+  const audioChunksRef = useRef<Int16Array[]>([]);
+  const finalTranscriptRef = useRef<string>("");
+  const interimTranscriptRef = useRef<string>("");
+  const assistantBufferRef = useRef<string>("");
 
   // Store callbacks in refs to prevent unnecessary reconnections
   const callbacksRef = useRef({
@@ -155,21 +170,7 @@ export function useADKWebSocket({
           const data = JSON.parse(event.data);
           console.log("[WS] Received message:", data);
 
-          // Handle turn completion first
-          if (data.turn_complete) {
-            console.log("[WS] Turn complete");
-            setIsProcessing(false);
-            onTurnComplete?.();
-            return;
-          }
-
-          // Ensure message has mime_type
-          if (!data.mime_type) {
-            console.warn("[WS] Message missing mime_type:", data);
-            return;
-          }
-
-          // Handle text messages
+          // Handle text messages first
           if (data.mime_type === "text/plain") {
             // Let the Chat component handle the text display
             onTextMessage(data.data, data.turn_complete, data.is_partial, "assistant");
@@ -224,6 +225,13 @@ export function useADKWebSocket({
             } else {
               console.log("[WS] Audio disabled, not playing PCM");
             }
+          }
+
+          // Handle turn_complete after processing the message content
+          if (data.turn_complete) {
+            console.log("[WS] Turn complete");
+            setIsProcessing(false);
+            onTurnComplete?.();
           }
         } catch (error) {
           console.error("[WS] Error processing message:", error);
@@ -314,6 +322,13 @@ export function useADKWebSocket({
   }, []);
 
   const startListening = useCallback(async () => {
+    // Extra safety: reset manual stop flag at the start of every recording session
+    stoppedManuallyRef.current = false;
+    // Clear any buffered audio chunks and transcripts
+    audioChunksRef.current = [];
+    finalTranscriptRef.current = "";
+    interimTranscriptRef.current = "";
+    
     // Stop any ongoing speech synthesis
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
@@ -321,7 +336,6 @@ export function useADKWebSocket({
 
     if (isRecording) {
       // Only allow user to stop recording by pressing the mic button
-      // Do not call stopListening() automatically here
       return;
     }
 
@@ -341,7 +355,6 @@ export function useADKWebSocket({
       recognition.onresult = (event) => {
         let interimTranscript = '';
         let finalTranscript = '';
-        
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
@@ -350,20 +363,17 @@ export function useADKWebSocket({
             interimTranscript += transcript;
           }
         }
-
-        // Only update the UI with interim results as user message
-        if (interimTranscript && interimTranscript !== interimMessageRef.current) {
-          interimMessageRef.current = interimTranscript;
-          callbacksRef.current.onTextMessage(interimTranscript, false, false, "user");
-        }
-
-        // Store the final transcript
+        
+        // Update our refs with the latest transcripts
         if (finalTranscript) {
-          const finalText = finalTranscript.trim();
-          if (finalText) {
-            interimMessageRef.current = finalText;
-          }
+          finalTranscriptRef.current += finalTranscript.trim() + ' ';
         }
+        interimTranscriptRef.current = interimTranscript;
+        
+        // Only update UI with transcription, don't send to backend yet
+        const displayText = (interimTranscriptRef.current + ' ' + finalTranscriptRef.current).trim();
+        // Show what user is saying in real-time, but mark as partial
+        callbacksRef.current.onTextMessage(displayText, false, true, "user");
       };
 
       recognition.onerror = (event) => {
@@ -377,27 +387,31 @@ export function useADKWebSocket({
 
       recognition.onend = () => {
         // Only send the message if we stopped manually (user pressed stop)
-        if (stoppedManuallyRef.current && interimMessageRef.current) {
-          const finalText = interimMessageRef.current;
-          interimMessageRef.current = "";
+        if (stoppedManuallyRef.current && finalTranscriptRef.current.trim()) {
+          const finalText = finalTranscriptRef.current.trim();
+          finalTranscriptRef.current = "";
+          interimTranscriptRef.current = "";
           stoppedManuallyRef.current = false;
+          
           if (ws.current && ws.current.readyState === WebSocket.OPEN) {
             conversationHistory.current = [];
             try {
+              // Send the complete transcription as a regular text message
+              console.log("[WS] Sending complete transcription:", finalText);
               ws.current.send(JSON.stringify({
                 mime_type: "text/plain",
                 data: finalText,
                 history: conversationHistory.current
               }));
-              console.log("[WS] Sent finalText to server with empty history:", finalText);
+              
+              // Remove audio sending since we're treating it as text
+              // audioChunksRef.current = [];
             } catch (err) {
               console.error("[WS] Error sending finalText to server with empty history:", err);
             }
-          } else {
-            console.log("[WS] WebSocket not open, cannot send finalText. ws.readyState:", ws.current?.readyState);
           }
         }
-        // Always restart recognition if still recording, but do NOT send message
+        // Always restart recognition if still recording
         if (isRecording) {
           recognition.start();
         }
@@ -428,14 +442,8 @@ export function useADKWebSocket({
           pcmData[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF;
         }
         
-        if (ws.current?.readyState === WebSocket.OPEN) {
-          const base64 = btoa(String.fromCharCode(...new Uint8Array(pcmData.buffer)));
-          
-          ws.current.send(JSON.stringify({
-            mime_type: "audio/pcm",
-            data: base64,
-          }));
-        }
+        // Buffer the audio chunk instead of sending immediately
+        audioChunksRef.current.push(pcmData);
       };
       
       setIsRecording(true);
@@ -467,16 +475,15 @@ export function useADKWebSocket({
         source: "audio",
         is_recording: false
       }));
+
+      // Remove audio chunk sending since we're treating it as text
+      audioChunksRef.current = [];
     }
 
     // If recognition is running, stop it and wait for onend to fire
     if (recognitionRef.current) {
       recognitionRef.current.stop();
       recognitionRef.current = null;
-    } else {
-      // If recognition is already ended (due to silence), do NOT send the transcript
-      // Only send if the user manually stops recording by pressing the mic button
-      // (No action needed here)
     }
 
     // Stop audio processing

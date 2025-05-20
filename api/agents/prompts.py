@@ -198,6 +198,9 @@ Based on these results, [your summary]
 Default behavior: Use your best judgment to decide when to search and how to present the results in a user-friendly way.
 '''
 
+
+
+
 ROOT_AGENT_INSTRUCTION = '''
 You are a powerful analytics assistant that can answer questions using both web search and event data analysis.
 

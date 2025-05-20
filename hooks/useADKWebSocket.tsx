@@ -131,13 +131,30 @@ export function useADKWebSocket({
     console.log("[WS] Audio state updated:", isAudioEnabled);
   }, [onTextMessage, onAudioMessage, onTurnComplete, isAudioEnabled, setIsAudioEnabled]);
 
+  // Add handler for assistant messages
+  const handleAssistantMessage = useCallback((message: string) => {
+    console.log("[WS] handleAssistantMessage called with:", message);
+    if (message.trim()) {
+      const assistantMessage: Message = { role: "assistant", content: message };
+      console.log("[WS] Adding assistant message to history:", assistantMessage);
+      console.log("[WS] Previous history:", conversationHistory.current);
+      conversationHistory.current = [...conversationHistory.current, assistantMessage];
+      console.log("[WS] Updated history:", conversationHistory.current);
+    }
+  }, []);
+
+  // Update socket.onmessage to use handleAssistantMessage
   const connect = useCallback(() => {
     if (ws.current?.readyState === WebSocket.OPEN) {
+      console.log("[WS] Already connected, skipping connect");
       return;
     }
+
     const userId = "001"; // You can randomize or parametrize this
     const sessionId = "001"; // You can randomize or parametrize this
-    const wsUrl = `ws://localhost:8000/ws/${sessionId}?user_id=${userId}&is_audio=false`;
+    const wsUrl = `ws://localhost:8000/ws/${sessionId}?user_id=${userId}`;
+    
+    console.log("[WS] Attempting to connect to:", wsUrl);
     
     try {
       const socket = new WebSocket(wsUrl);
@@ -151,18 +168,9 @@ export function useADKWebSocket({
       }, 30000); // Send ping every 30 seconds
 
       socket.onopen = () => {
-        console.log("[WS] Connected.");
+        console.log("[WS] Connected successfully");
         setIsConnected(true);
         reconnectAttempts.current = 0;
-        // Send initial conversation history when connecting
-        if (conversationHistory.current.length > 0) {
-          console.log("0");
-          socket.send(JSON.stringify({
-            mime_type: "text/plain",
-            data: "",
-            history: conversationHistory.current
-          }));
-        }
       };
 
       socket.onmessage = (event) => {
@@ -170,66 +178,31 @@ export function useADKWebSocket({
           const data = JSON.parse(event.data);
           console.log("[WS] Received message:", data);
 
-          // Handle text messages first
           if (data.mime_type === "text/plain") {
-            // Let the Chat component handle the text display
+            console.log("[WS] Processing text message:", data);
             onTextMessage(data.data, data.turn_complete, data.is_partial, "assistant");
             
-            // If audio is enabled and this message should be spoken
+            // Only add complete messages to history
+            if (data.turn_complete && !data.is_partial) {
+              console.log("[WS] Adding complete message to history:", data.data);
+              handleAssistantMessage(data.data);
+            }
+            
             if (data.is_speech && callbacksRef.current.isAudioEnabled && 'speechSynthesis' in window) {
-              // Only speak complete messages, not partial ones
               if (!data.is_partial) {
                 console.log("[WS] Speaking text:", data.data);
-                // Cancel any ongoing speech
                 if (currentUtterance.current) {
                   window.speechSynthesis.cancel();
                 }
-                
                 const utterance = new SpeechSynthesisUtterance(data.data);
                 currentUtterance.current = utterance;
                 window.speechSynthesis.speak(utterance);
               }
-            } else {
-              console.log("[WS] Audio disabled or not marked for speech, not speaking");
-            }
-          } else if (data.mime_type === "text/speech" && callbacksRef.current.isAudioEnabled) {
-            // Only handle speech if audio is enabled and we haven't already spoken this text
-            if ('speechSynthesis' in window && data.data !== currentUtterance.current?.text) {
-              console.log("[WS] Speaking text from speech message:", data.data);
-              // Cancel any ongoing speech
-              if (currentUtterance.current) {
-                window.speechSynthesis.cancel();
-              }
-              
-              const utterance = new SpeechSynthesisUtterance(data.data);
-              currentUtterance.current = utterance;
-              window.speechSynthesis.speak(utterance);
-            }
-          } else if (data.mime_type === "audio/pcm") {
-            // Only handle audio messages if audio is enabled
-            if (callbacksRef.current.isAudioEnabled) {
-              console.log("[WS] Playing PCM audio");
-              const audioData = atob(data.data);
-              const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-              const audioBuffer = audioContext.createBuffer(1, audioData.length, 44100);
-              const channelData = audioBuffer.getChannelData(0);
-              
-              for (let i = 0; i < audioData.length; i++) {
-                channelData[i] = (audioData.charCodeAt(i) - 128) / 128.0;
-              }
-              
-              const source = audioContext.createBufferSource();
-              source.buffer = audioBuffer;
-              source.connect(audioContext.destination);
-              source.start();
-            } else {
-              console.log("[WS] Audio disabled, not playing PCM");
             }
           }
 
-          // Handle turn_complete after processing the message content
           if (data.turn_complete) {
-            console.log("[WS] Turn complete");
+            console.log("[WS] Turn complete, processing state:", isProcessing);
             setIsProcessing(false);
             onTurnComplete?.();
           }
@@ -239,36 +212,88 @@ export function useADKWebSocket({
       };
 
       socket.onerror = (err) => {
-        console.error("[WS] Error:", err);
+        console.error("[WS] WebSocket error:", err);
         setIsConnected(false);
         clearInterval(pingInterval);
       };
 
-      socket.onclose = () => {
-        console.log("[WS] Disconnected.");
+      socket.onclose = (event) => {
+        console.log("[WS] Disconnected with code:", event.code, "reason:", event.reason);
         setIsConnected(false);
         clearInterval(pingInterval);
         
         // Only attempt to reconnect if we're not intentionally closing
-        if (!isRecording && reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
+        if (reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
           reconnectAttempts.current += 1;
           console.log(`[WS] Attempting to reconnect (${reconnectAttempts.current}/${MAX_RECONNECT_ATTEMPTS})...`);
           reconnectTimeout.current = setTimeout(connect, RECONNECT_DELAY * reconnectAttempts.current);
         } else {
-          console.error("[WS] Max reconnection attempts reached or recording stopped.");
+          console.error("[WS] Max reconnection attempts reached.");
         }
       };
     } catch (err) {
       console.error("[WS] Failed to create WebSocket:", err);
       setIsConnected(false);
     }
-  }, []);
+  }, [handleAssistantMessage]);
+
+  const sendMessage = useCallback((message: any) => {
+    console.log("[WS] Attempting to send message:", message);
+    console.log("[WS] Current WebSocket state:", ws.current?.readyState);
+    console.log("[WS] Current conversation history:", conversationHistory.current);
+
+    if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
+      console.log("[WS] Socket not ready, attempting reconnect before send");
+      connect();
+      // Queue the message to be sent after connection
+      setTimeout(() => {
+        if (ws.current?.readyState === WebSocket.OPEN) {
+          console.log("[WS] Sending queued message:", message);
+          ws.current.send(JSON.stringify(message));
+        } else {
+          console.error("[WS] Failed to send message - socket still not ready, state:", ws.current?.readyState);
+        }
+      }, 1000);
+      return;
+    }
+    
+    try {
+      console.log("[WS] Sending message through WebSocket");
+      ws.current.send(JSON.stringify(message));
+      console.log("[WS] Message sent successfully");
+    } catch (err) {
+      console.error("[WS] Error sending message:", err);
+    }
+  }, [connect]);
+
+  const sendUserMessage = useCallback((text: string) => {
+    console.log("[WS] sendUserMessage called with:", text);
+    // Add user message to conversation history
+    const userMessage: Message = { role: "user", content: text };
+    console.log("[WS] Adding message to history:", userMessage);
+    console.log("[WS] Previous history:", conversationHistory.current);
+    
+    const updatedHistory = [...conversationHistory.current, userMessage];
+    console.log("[WS] Updated history to send:", updatedHistory);
+    
+    sendMessage({
+      mime_type: "text/plain",
+      data: text,
+      history: updatedHistory
+    });
+    
+    // Only update history after successful send
+    conversationHistory.current = updatedHistory;
+    console.log("[WS] History updated:", conversationHistory.current);
+  }, [sendMessage]);
 
   // Clean up on unmount
   useEffect(() => {
+    console.log("[WS] Initial connect");
     connect();
 
     return () => {
+      console.log("[WS] Cleaning up WebSocket connection");
       if (reconnectTimeout.current) {
         clearTimeout(reconnectTimeout.current);
       }
@@ -303,22 +328,6 @@ export function useADKWebSocket({
       window.removeEventListener('beforeunload', saveHistory);
       saveHistory(); // Save one last time
     };
-  }, []);
-
-  const sendUserMessage = useCallback((text: string) => {
-    if (ws.current?.readyState === WebSocket.OPEN) {
-      // Add user message to conversation history
-      conversationHistory.current.push({ role: "user", content: text });
-      console.log("[WS] Sending message with history:", conversationHistory.current);
-      
-      ws.current.send(JSON.stringify({
-        mime_type: "text/plain",
-        data: text,
-        history: conversationHistory.current
-      }));
-    } else {
-      console.error("[WS] Cannot send message: WebSocket is not connected");
-    }
   }, []);
 
   const startListening = useCallback(async () => {
@@ -367,11 +376,14 @@ export function useADKWebSocket({
         // Update our refs with the latest transcripts
         if (finalTranscript) {
           finalTranscriptRef.current += finalTranscript.trim() + ' ';
+          console.log("[Speech] Added to final transcript:", finalTranscript.trim());
         }
         interimTranscriptRef.current = interimTranscript;
+        console.log("[Speech] Current interim transcript:", interimTranscript);
         
         // Only update UI with transcription, don't send to backend yet
         const displayText = (interimTranscriptRef.current + ' ' + finalTranscriptRef.current).trim();
+        console.log("[Speech] Display text:", displayText);
         // Show what user is saying in real-time, but mark as partial
         callbacksRef.current.onTextMessage(displayText, false, true, "user");
       };
@@ -379,6 +391,7 @@ export function useADKWebSocket({
       recognition.onerror = (event) => {
         console.error("[Speech] Recognition error:", event.error);
         if (event.error === 'no-speech') {
+          console.log("[Speech] No speech detected, restarting recognition");
           // Restart recognition if no speech is detected
           recognition.stop();
           recognition.start();
@@ -386,6 +399,10 @@ export function useADKWebSocket({
       };
 
       recognition.onend = () => {
+        console.log("[Speech] Recognition ended");
+        console.log("[Speech] Manual stop:", stoppedManuallyRef.current);
+        console.log("[Speech] Final transcript:", finalTranscriptRef.current);
+        
         // Only send the message if we stopped manually (user pressed stop)
         if (stoppedManuallyRef.current && finalTranscriptRef.current.trim()) {
           const finalText = finalTranscriptRef.current.trim();
@@ -393,26 +410,19 @@ export function useADKWebSocket({
           interimTranscriptRef.current = "";
           stoppedManuallyRef.current = false;
           
-          if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-            conversationHistory.current = [];
-            try {
-              // Send the complete transcription as a regular text message
-              console.log("[WS] Sending complete transcription:", finalText);
-              ws.current.send(JSON.stringify({
-                mime_type: "text/plain",
-                data: finalText,
-                history: conversationHistory.current
-              }));
-              
-              // Remove audio sending since we're treating it as text
-              // audioChunksRef.current = [];
-            } catch (err) {
-              console.error("[WS] Error sending finalText to server with empty history:", err);
-            }
-          }
+          // Use the sendMessage function instead of directly accessing ws.current
+          sendMessage({
+            mime_type: "text/plain",
+            data: finalText,
+            history: conversationHistory.current
+          });
+        } else {
+          console.log("[Speech] Not sending - Manual stop:", stoppedManuallyRef.current, "Final transcript:", finalTranscriptRef.current);
         }
+        
         // Always restart recognition if still recording
         if (isRecording) {
+          console.log("[Speech] Still recording, restarting recognition");
           recognition.start();
         }
       };
@@ -434,51 +444,34 @@ export function useADKWebSocket({
       source.connect(processor);
       processor.connect(audioContext.destination);
       
-      processor.onaudioprocess = (e) => {
-        const inputData = e.inputBuffer.getChannelData(0);
-        // Convert Float32Array to Int16Array (PCM format)
-        const pcmData = new Int16Array(inputData.length);
-        for (let i = 0; i < inputData.length; i++) {
-          pcmData[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF;
-        }
-        
-        // Buffer the audio chunk instead of sending immediately
-        audioChunksRef.current.push(pcmData);
-      };
-      
       setIsRecording(true);
-      // Send recording state to server
-      if (ws.current?.readyState === WebSocket.OPEN) {
-        ws.current.send(JSON.stringify({
-          mime_type: "audio/state",
-          data: "",
-          source: "audio",
-          is_recording: true
-        }));
-      }
+      
+      // Send recording state to server using sendMessage instead of direct ws access
+      sendMessage({
+        mime_type: "audio/state",
+        data: "",
+        source: "audio",
+        is_recording: true
+      });
+      
       console.log("[Audio] Started recording");
     } catch (err) {
       console.error("[Audio] Failed to start recording:", err);
       stopListening(); // Clean up if there's an error
     }
-  }, [isRecording, connect, sendUserMessage]);
+  }, [isRecording, sendMessage]);
 
   const stopListening = useCallback(() => {
     setIsRecording(false);
     stoppedManuallyRef.current = true; // Only set this here, on explicit user action
 
-    // Send recording state to server
-    if (ws.current?.readyState === WebSocket.OPEN) {
-      ws.current.send(JSON.stringify({
-        mime_type: "audio/state",
-        data: "",
-        source: "audio",
-        is_recording: false
-      }));
-
-      // Remove audio chunk sending since we're treating it as text
-      audioChunksRef.current = [];
-    }
+    // Send recording state to server using sendMessage
+    sendMessage({
+      mime_type: "audio/state",
+      data: "",
+      source: "audio",
+      is_recording: false
+    });
 
     // If recognition is running, stop it and wait for onend to fire
     if (recognitionRef.current) {
@@ -504,7 +497,7 @@ export function useADKWebSocket({
       streamRef.current = null;
     }
     console.log("[Audio] Stopped recording");
-  }, [connect, sendUserMessage]);
+  }, [sendMessage]);
 
   // Clean up on unmount
   useEffect(() => {

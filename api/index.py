@@ -44,7 +44,7 @@ load_dotenv()
 
 APP_NAME = "ADK Streaming example"
 session_service = FirestoreSessionService(collection_name="vendo_ai_memory")
-def start_agent_session(session_id, user_id, is_audio=False):
+def start_agent_session(session_id, user_id):
     session = session_service.create_session(
         app_name=APP_NAME,
         user_id=user_id,
@@ -55,8 +55,7 @@ def start_agent_session(session_id, user_id, is_audio=False):
         agent=root_agent,
         session_service=session_service
     )
-    modality = "AUDIO" if is_audio else "TEXT"
-    run_config = RunConfig(response_modalities=[modality])
+    run_config = RunConfig(response_modalities=["text"])
     live_request_queue = LiveRequestQueue()
     live_events = runner.run_live(
         session=session,
@@ -71,6 +70,59 @@ async def agent_to_client_messaging(websocket, live_events, user_id):
         response_count = 0  # Track number of responses
         last_response_time = None  # Track time of last response
         
+        # If live_events is a list, handle single event
+        if isinstance(live_events, list):
+            event = live_events[0]
+            try:
+                part: Part = event.content.parts[0] if event.content and event.content.parts else None
+                if not part:
+                    return
+
+                if part.inline_data and part.inline_data.mime_type.startswith("audio/pcm"):
+                    audio_data = part.inline_data.data
+                    if audio_data:
+                        await websocket.send_text(json.dumps({
+                            "mime_type": "audio/pcm",
+                            "data": base64.b64encode(audio_data).decode("ascii")
+                        }))
+                        return
+
+                if part.text:
+                    # Check if this text is already in the buffer to prevent duplication
+                    if part.text not in buffer:
+                        # Accumulate the text in buffer
+                        buffer += part.text
+
+                    # Add debug logging for each condition
+                    is_final = getattr(event, 'is_final_response', lambda: False)()
+                    is_turn_complete = getattr(event, 'turn_complete', False)
+                    print(f"[DEBUG] Message conditions - is_final: {is_final}, turn_complete: {is_turn_complete}", flush=True)
+                    print(f"[DEBUG] Current buffer content: {buffer}", flush=True)
+
+                    # Send immediately for single events
+                    if buffer:
+                        session_service.append_message(str(user_id), "assistant", buffer)
+                        print(f"[DEBUG] Sending single event message", flush=True)
+                        await websocket.send_text(json.dumps({
+                            "mime_type": "text/plain",
+                            "data": buffer,
+                            "is_speech": True,
+                            "turn_complete": True,
+                            "interrupted": False
+                        }))
+                        buffer = ""  # Clear the buffer
+                        print("[DEBUG] Buffer cleared", flush=True)
+
+            except Exception as e:
+                print(f"[ERROR] Processing single event: {str(e)}", flush=True)
+                await websocket.send_text(json.dumps({
+                    "mime_type": "text/plain",
+                    "data": f"Error: {str(e)}",
+                    "error": True
+                }))
+            return
+
+        # Handle async iterator for live events
         async for event in live_events:
             try:
                 part: Part = event.content.parts[0] if event.content and event.content.parts else None
@@ -128,6 +180,7 @@ async def agent_to_client_messaging(websocket, live_events, user_id):
                     "data": f"Error: {str(e)}",
                     "error": True
                 }))
+
     except Exception as e:
         print(f"[ERROR] Outer agent_to_client_messaging: {str(e)}", flush=True)
         await websocket.send_text(json.dumps({
@@ -137,7 +190,7 @@ async def agent_to_client_messaging(websocket, live_events, user_id):
         }))
         await websocket.send_text(json.dumps({"turn_complete": True}))
 
-async def client_to_agent_messaging(websocket, user_id):
+async def client_to_agent_messaging(websocket, user_id, live_request_queue):
     try:
         while True:
             message = await websocket.receive_text()
@@ -146,6 +199,9 @@ async def client_to_agent_messaging(websocket, user_id):
             content = data.get("data", "")
             history = data.get("history", [])
             is_recording = data.get("is_recording", None)
+
+            print(f"[DEBUG] Received message - type: {mime_type}, content: {content}", flush=True)
+            print(f"[DEBUG] Message history: {history}", flush=True)
 
             # Handle audio recording state changes
             if mime_type == "audio/state":
@@ -156,17 +212,23 @@ async def client_to_agent_messaging(websocket, user_id):
             # All text messages (whether from direct text input or transcribed audio)
             # go through the same path
             if mime_type == "text/plain" and content:
-                print(f"[Agent] Received text message: {content}", flush=True)
+                print(f"[Agent] Processing text message: {content}", flush=True)
                 
-                # Create run config with only allowed parameters
-                run_config = RunConfig(
-                    response_modalities=["text"]  # Only include valid parameters
-                )
+                try:
+                    # Send the content through the shared request queue
+                    print(f"[DEBUG] Sending content to request queue: {content}", flush=True)
+                    live_request_queue.send_content(Content(role="user", parts=[Part.from_text(text=content)]))
+                    print(f"[DEBUG] Content sent to request queue", flush=True)
 
-                # Run the agent with the text input - pass run_config as a kwarg
-                agent = root_agent
-                async for event in agent.run_live(content, config=run_config):
-                    await agent_to_client_messaging(websocket, [event], user_id)
+                except Exception as e:
+                    print(f"[ERROR] Error processing message: {str(e)}", flush=True)
+                    traceback.print_exc()
+                    await websocket.send_text(json.dumps({
+                        "mime_type": "text/plain",
+                        "data": f"Error processing message: {str(e)}",
+                        "error": True,
+                        "turn_complete": True
+                    }))
 
     except WebSocketDisconnect:
         print(f"[WebSocket] Client #{user_id} disconnected", flush=True)
@@ -181,18 +243,44 @@ async def websocket_endpoint(
     websocket: WebSocket,
     session_id: int,
     user_id: str = Query(...),
-    is_audio: str = Query("false")
 ):
     try:
         await websocket.accept()
-        print(f"Client #{session_id} connected (User: {user_id}, Audio: {is_audio})", flush=True)
-        live_events, live_request_queue = start_agent_session(
-            session_id=str(session_id),
+        print(f"Client #{session_id} connected (User: {user_id})", flush=True)
+        
+        # Create one session and runner for the entire WebSocket connection
+        session = session_service.create_session(
+            app_name=APP_NAME,
             user_id=user_id,
-            is_audio=is_audio == "true"
+            session_id=str(session_id),
         )
-        agent_to_client_task = asyncio.create_task(agent_to_client_messaging(websocket, live_events, user_id))
-        client_to_agent_task = asyncio.create_task(client_to_agent_messaging(websocket, user_id))
+        
+        runner = Runner(
+            app_name=APP_NAME,
+            agent=root_agent,
+            session_service=session_service
+        )
+        
+        # Create initial run config
+        run_config = RunConfig(response_modalities=["text"])
+        
+        print(f"[DEBUG] Created session and runner for WebSocket connection", flush=True)
+        
+        # Create a shared request queue
+        live_request_queue = LiveRequestQueue()
+        live_events = runner.run_live(
+            session=session,
+            live_request_queue=live_request_queue,
+            run_config=run_config,
+        )
+        
+        # Pass the shared session, runner, and request queue to the message handlers
+        agent_to_client_task = asyncio.create_task(
+            agent_to_client_messaging(websocket, live_events, user_id)
+        )
+        client_to_agent_task = asyncio.create_task(
+            client_to_agent_messaging(websocket, user_id, live_request_queue)
+        )
         await asyncio.gather(agent_to_client_task, client_to_agent_task)
     except Exception as e:
         print(f"Error in websocket endpoint: {e}", flush=True)

@@ -89,11 +89,14 @@ class FirestoreSessionService(BaseSessionService):
             "memory": memory
         })
 
-    def append_message(self, user_id: str, role: str, content: str):
-        embedding = embed_text(content)
-        # Convert embedding to a list of floats that Firestore can store
-        embedding_list = embedding.tolist() if hasattr(embedding, 'tolist') else list(embedding)
-        print("EMBEDDING LIST", embedding_list)
+    def append_message(self, user_id: str, role: str, content: str, message_type: str = "messages", include_embedding: bool = False):
+
+        if include_embedding:
+            embedding = embed_text(content)
+            # Convert embedding to a list of floats that Firestore can store
+            embedding_list = embedding.tolist() if hasattr(embedding, 'tolist') else list(embedding)
+        else:
+            embedding_list = None
         
         message = {
             "role": role,
@@ -103,7 +106,7 @@ class FirestoreSessionService(BaseSessionService):
         }
         # Use user_id directly as the document ID
         self.collection.document(user_id).set({
-            "messages": firestore.ArrayUnion([message])
+            message_type: firestore.ArrayUnion([message])
         }, merge=True)
 
     
@@ -115,12 +118,12 @@ class FirestoreSessionService(BaseSessionService):
             return doc.to_dict().get("messages", [])
         return []
     
-    def get_all_message_embeddings(self, user_id: str):
+    def get_all_message_embeddings(self, user_id: str, message_type: str = "requirements"):
         doc = self.collection.document(user_id).get()
         if not doc.exists:
             return []
 
-        messages = doc.to_dict().get("messages", [])
+        messages = doc.to_dict().get(message_type, [])
         result = []
 
         for msg in messages:
@@ -140,9 +143,11 @@ def embed_text(content: str) -> List[float]:
             contents=content,
             config=types.EmbedContentConfig(task_type="SEMANTIC_SIMILARITY")
     )
-    print("RESULT", result)
     # Get the values and ensure they're in the right format
     embedding_values = result.embeddings[0].values
     # Convert to a regular list to ensure Firestore compatibility
     return list(embedding_values)
+
+#session_service = FirestoreSessionService()
+#session_service.append_message("001", "user", "My name is Suraj", message_type="requirements", include_embedding=True)
 

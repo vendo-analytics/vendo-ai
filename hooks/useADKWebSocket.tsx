@@ -150,7 +150,7 @@ export function useADKWebSocket({
       return;
     }
 
-    const userId = "001"; // You can randomize or parametrize this
+    const userId = "SURAJ"; // You can randomize or parametrize this
     const sessionId = "001"; // You can randomize or parametrize this
     const wsUrl = `ws://localhost:8000/ws/${sessionId}?user_id=${userId}`;
     

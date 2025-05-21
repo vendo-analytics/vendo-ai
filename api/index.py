@@ -30,18 +30,24 @@ from google.genai.types import (
 from google.adk.runners import Runner
 from google.adk.agents import LiveRequestQueue
 from google.adk.agents.run_config import RunConfig
-from .firebase_client import FirestoreSessionService
-from .firebase_client import FirestoreMemoryService
+from .firebase_client import FirestoreSessionService, embed_text
 from fastapi import FastAPI, WebSocket, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi import WebSocketDisconnect
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
 
 from .agents.agents import root_agent
 
 # Load environment variables
 load_dotenv()
-
+LANGFUSE_AUTH = base64.b64encode(
+    f"{os.getenv('LANGFUSE_PUBLIC_KEY')}:{os.getenv('LANGFUSE_SECRET_KEY')}".encode()
+).decode()
+ 
+#OTEL_EXPORTER_OTLP_ENDPOINT = os.getenv("LANGFUSE_HOST") + "/api/public/otel"
+OTEL_EXPORTER_OTLP_HEADERS = f"Authorization=Basic {LANGFUSE_AUTH}"
 APP_NAME = "ADK Streaming example"
 session_service = FirestoreSessionService(collection_name="vendo_ai_memory")
 def start_agent_session(session_id, user_id):
@@ -63,6 +69,36 @@ def start_agent_session(session_id, user_id):
         run_config=run_config,
     )
     return live_events, live_request_queue
+
+def get_top_k_context(user_query: str, user_id: str, k=3, min_similarity=0.7):
+    try:
+        query_vec = np.array(embed_text(user_query))
+        query_vec = query_vec.reshape(1, -1)  # Ensure 2D shape
+    except ValueError as e:
+        print(f"[ERROR] Failed to embed user query: {e}")
+        return []
+
+    messages = session_service.get_all_message_embeddings(user_id)
+    if not messages:
+        return []
+
+    scored = []
+    for msg in messages:
+        emb = msg.get("embedding")
+        if not emb:
+            continue
+        try:
+            emb_vec = np.array(emb).reshape(1, -1)
+            score = cosine_similarity(query_vec, emb_vec)[0][0]
+            if score >= min_similarity:
+                scored.append((msg, score))
+        except Exception as e:
+            print(f"[WARN] Failed similarity calc for message: {msg.get('content')}\nError: {e}")
+            continue
+
+    top_k = sorted(scored, key=lambda x: x[1], reverse=True)[:k]
+    return [msg["content"] for msg, _ in top_k]
+
 
 async def agent_to_client_messaging(websocket, live_events, user_id):
     try:
@@ -101,6 +137,7 @@ async def agent_to_client_messaging(websocket, live_events, user_id):
 
                     # Send immediately for single events
                     if buffer:
+                        # Store assistant message in Firebase
                         session_service.append_message(str(user_id), "assistant", buffer)
                         print(f"[DEBUG] Sending single event message", flush=True)
                         await websocket.send_text(json.dumps({
@@ -160,6 +197,7 @@ async def agent_to_client_messaging(websocket, live_events, user_id):
                         
                         # If no new responses have come in after waiting, this is truly the final one
                         if current_time == last_response_time:
+                            # Store assistant message in Firebase
                             session_service.append_message(str(user_id), "assistant", buffer)
                             print(f"[DEBUG] Sending complete assistant message after {response_count} responses", flush=True)
                             await websocket.send_text(json.dumps({
@@ -195,46 +233,24 @@ async def client_to_agent_messaging(websocket, user_id, live_request_queue):
         while True:
             message = await websocket.receive_text()
             data = json.loads(message)
-            mime_type = data.get("mime_type", "")
             content = data.get("data", "")
-            history = data.get("history", [])
-            is_recording = data.get("is_recording", None)
-
-            print(f"[DEBUG] Received message - type: {mime_type}, content: {content}", flush=True)
-            print(f"[DEBUG] Message history: {history}", flush=True)
-
-            # Handle audio recording state changes
-            if mime_type == "audio/state":
-                if is_recording is not None:
-                    print(f"[Audio] Recording state changed to: {is_recording}", flush=True)
-                continue
-
-            # All text messages (whether from direct text input or transcribed audio)
-            # go through the same path
-            if mime_type == "text/plain" and content:
-                print(f"[Agent] Processing text message: {content}", flush=True)
+            
+            if data.get("mime_type") == "text/plain":
+                # Store user message in Firebase
                 
-                try:
-                    # Send the content through the shared request queue
-                    print(f"[DEBUG] Sending content to request queue: {content}", flush=True)
-                    live_request_queue.send_content(Content(role="user", parts=[Part.from_text(text=content)]))
-                    print(f"[DEBUG] Content sent to request queue", flush=True)
-
-                except Exception as e:
-                    print(f"[ERROR] Error processing message: {str(e)}", flush=True)
-                    traceback.print_exc()
-                    await websocket.send_text(json.dumps({
-                        "mime_type": "text/plain",
-                        "data": f"Error processing message: {str(e)}",
-                        "error": True,
-                        "turn_complete": True
-                    }))
-
+                session_service.append_message(str(user_id), "user", content)
+                context = get_top_k_context(content, user_id)
+                full_input = "\n\n".join(context + [content])
+                live_request_queue.send_content(Content(role="user", parts=[Part.from_text(text=full_input)]))
+                #live_request_queue.send_content(Content(role="user", parts=[Part.from_text(text=content)]))
+            elif data.get("mime_type") == "audio/state":
+                # Handle audio state changes
+                is_recording = data.get("is_recording", False)
+                print(f"[DEBUG] Audio state change: is_recording={is_recording}", flush=True)
     except WebSocketDisconnect:
-        print(f"[WebSocket] Client #{user_id} disconnected", flush=True)
+        print("[DEBUG] WebSocket disconnected", flush=True)
     except Exception as e:
-        print(f"[WebSocket] Error in client_to_agent_messaging: {str(e)}", flush=True)
-        traceback.print_exc()
+        print(f"[ERROR] client_to_agent_messaging: {str(e)}", flush=True)
 
 app = FastAPI()
 
@@ -291,3 +307,13 @@ async def websocket_endpoint(
         }))
     finally:
         print(f"Client #{session_id} disconnected", flush=True)
+
+@app.get("/api/chat/history")
+async def get_chat_history(user_id: str = Query(...)):
+    try:
+        # Get messages for the user from Firebase
+        messages = session_service.get_messages(str(user_id))
+        return messages
+    except Exception as e:
+        print(f"[ERROR] Failed to get chat history: {str(e)}", flush=True)
+        return {"error": str(e)}, 500

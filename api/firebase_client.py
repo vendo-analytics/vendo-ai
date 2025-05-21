@@ -7,35 +7,13 @@ import firebase_admin
 from firebase_admin import credentials, firestore as admin_firestore
 from google.cloud.firestore_v1 import ArrayUnion
 import datetime
-
-
-
-class FirestoreMemoryService():
-    def __init__(self, collection_name="vendo_ai_memory"):
-        self.client = firestore.client(firebase_admin.initialize_app(options={
-            'databaseURL': os.getenv("FIREBASE_DB_URL")
-        }))
-        self.collection = self.client.collection(collection_name)
-
-
-    def _doc_ref(self, app_name: str, user_id: str, session_id: str):
-        return self.collection.document(f"{app_name}:{user_id}:{session_id}")
-
-    async def get_memory(self, app_name: str, user_id: str, session_id: str) -> Dict:
-        doc = await asyncio.to_thread(self._doc_ref(app_name, user_id, session_id).get)
-        if doc.exists:
-            return doc.to_dict()
-        return {}
-
-    async def set_memory(self, app_name: str, user_id: str, session_id: str, memory: Dict) -> None:
-        await asyncio.to_thread(self._doc_ref(app_name, user_id, session_id).set, memory)
-
-# --- Custom Firestore Session Service ---
 from google.cloud import firestore
 from google.adk.sessions.session import Session
 from google.adk.sessions import BaseSessionService
 from typing import List, Optional
-
+from vertexai.language_models import TextEmbeddingModel
+from google import genai
+from google.genai import types
 
 class FirestoreSessionService(BaseSessionService):
     def __init__(self, collection_name="vendo_ai_memory"):
@@ -111,18 +89,60 @@ class FirestoreSessionService(BaseSessionService):
             "memory": memory
         })
 
-    def append_message(self, session_id: str, role: str, content: str):
+    def append_message(self, user_id: str, role: str, content: str):
+        embedding = embed_text(content)
+        # Convert embedding to a list of floats that Firestore can store
+        embedding_list = embedding.tolist() if hasattr(embedding, 'tolist') else list(embedding)
+        print("EMBEDDING LIST", embedding_list)
+        
         message = {
             "role": role,
             "content": content,
-            "timestamp": datetime.datetime.utcnow()
+            "timestamp": datetime.datetime.utcnow(),
+            "embedding": embedding_list  # Store as regular list
         }
-        self.collection.document(session_id).set({
+        # Use user_id directly as the document ID
+        self.collection.document(user_id).set({
             "messages": firestore.ArrayUnion([message])
         }, merge=True)
 
-    def get_messages(self, session_id: str):
-        doc = self.collection.document(session_id).get()
+    
+
+    def get_messages(self, user_id: str):
+        # Use user_id directly as the document ID
+        doc = self.collection.document(user_id).get()
         if doc.exists:
             return doc.to_dict().get("messages", [])
         return []
+    
+    def get_all_message_embeddings(self, user_id: str):
+        doc = self.collection.document(user_id).get()
+        if not doc.exists:
+            return []
+
+        messages = doc.to_dict().get("messages", [])
+        result = []
+
+        for msg in messages:
+            if "embedding" in msg and "content" in msg:
+                result.append({
+                    "content": msg["content"],
+                    "embedding": msg["embedding"]
+                })
+
+        return result
+    
+def embed_text(content: str) -> List[float]:
+    client = genai.Client()
+
+    result = client.models.embed_content(
+            model="gemini-embedding-exp-03-07",
+            contents=content,
+            config=types.EmbedContentConfig(task_type="SEMANTIC_SIMILARITY")
+    )
+    print("RESULT", result)
+    # Get the values and ensure they're in the right format
+    embedding_values = result.embeddings[0].values
+    # Convert to a regular list to ensure Firestore compatibility
+    return list(embedding_values)
+

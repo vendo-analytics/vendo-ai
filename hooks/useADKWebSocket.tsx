@@ -195,6 +195,23 @@ export function useADKWebSocket({
                   window.speechSynthesis.cancel();
                 }
                 const utterance = new SpeechSynthesisUtterance(data.data);
+                const voices = window.speechSynthesis.getVoices();
+                // Prefer a more human-like voice (Google voice if available)
+                const preferredVoice = voices.find(
+                  (v) =>
+                    v.name.toLowerCase().includes("google") &&
+                    v.lang === "en-US"
+                );
+
+                if (preferredVoice) {
+                  utterance.voice = preferredVoice;
+                }
+
+                // Adjust voice parameters
+                utterance.pitch = 1.2;   // More expressive
+                utterance.rate = 0.95;   // Slightly slower = more natural
+                utterance.volume = 1.0;  // Full volume
+
                 currentUtterance.current = utterance;
                 window.speechSynthesis.speak(utterance);
               }

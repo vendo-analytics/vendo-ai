@@ -68,6 +68,8 @@ OTEL_HEADERS = {
     "Authorization": f"Basic {LANGFUSE_AUTH}"
 }
 
+active_contexts = {}
+
 # Sets the global default tracer provider
 provider = TracerProvider(
     resource=Resource.create({
@@ -78,6 +80,7 @@ provider = TracerProvider(
 
 class LoggingExporter(OTLPSpanExporter):
     def export(self, spans):
+        print(f"[DEBUG] Exporting spans: {spans}", flush=True)
         logger.debug("Attempting to export %d spans", len(spans))
         try:
             result = super().export(spans)
@@ -180,79 +183,107 @@ async def agent_to_client_messaging(websocket, live_events, user_id):
         response_count = 0  # Track number of responses
         last_response_time = None  # Track time of last response
         
-        with tracer.start_as_current_span("agent_response") as span:
-            span.set_attribute("user_id", user_id)
             
-            # If live_events is a list, handle single event
-            if isinstance(live_events, list):
-                event = live_events[0]
-                try:
-                    part: Part = event.content.parts[0] if event.content and event.content.parts else None
-                    if not part:
-                        return
+            # # If live_events is a list, handle single event
+            # if isinstance(live_events, list):
+            #     event = live_events[0]
+            #     try:
+            #         print(f"[DEBUG] LIST EVENT: {event}", flush=True)
+            #         part: Part = event.content.parts[0] if event.content and event.content.parts else None
+            #         if not part:
+            #             return
 
-                    if part.inline_data and part.inline_data.mime_type.startswith("audio/pcm"):
-                        audio_data = part.inline_data.data
-                        if audio_data:
-                            await websocket.send_text(json.dumps({
-                                "mime_type": "audio/pcm",
-                                "data": base64.b64encode(audio_data).decode("ascii")
-                            }))
-                            return
+            #         if part.inline_data and part.inline_data.mime_type.startswith("audio/pcm"):
+            #             audio_data = part.inline_data.data
+            #             if audio_data:
+            #                 await websocket.send_text(json.dumps({
+            #                     "mime_type": "audio/pcm",
+            #                     "data": base64.b64encode(audio_data).decode("ascii")
+            #                 }))
+            #                 return
 
-                    if part.text:
-                        if part.text not in buffer:
-                            buffer += part.text
+            #         if part.text:
+            #             if part.text not in buffer:
+            #                 buffer += part.text
 
-                        if buffer:
-                            session_service.append_message(str(user_id), "assistant", buffer, message_type="messages", include_embedding=False)
-                            await websocket.send_text(json.dumps({
-                                "mime_type": "text/plain",
-                                "data": buffer,
-                                "is_speech": True,
-                                "turn_complete": True,
-                                "interrupted": False
-                            }))
-                            buffer = ""
+            #             if buffer:
+            #                 span.set_attribute("message_content", buffer)
+            #                 span.add_event(
+            #                     name="output",
+            #                     attributes={"content": buffer}
+            #                 )
+            #                 session_service.append_message(str(user_id), "assistant", buffer, message_type="messages", include_embedding=False)
+            #                 await websocket.send_text(json.dumps({
+            #                     "mime_type": "text/plain",
+            #                     "data": buffer,
+            #                     "is_speech": True,
+            #                     "turn_complete": True,
+            #                     "interrupted": False
+            #                 }))
+            #                 buffer = ""
 
-                except Exception as e:
-                    span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
-                    logger.error(f"Processing single event: {str(e)}")
-                    await websocket.send_text(json.dumps({
-                        "mime_type": "text/plain",
-                        "data": f"Error: {str(e)}",
-                        "error": True
-                    }))
-                return
+            #     except Exception as e:
+            #         span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+            #         logger.error(f"Processing single event: {str(e)}")
+            #         await websocket.send_text(json.dumps({
+            #             "mime_type": "text/plain",
+            #             "data": f"Error: {str(e)}",
+            #             "error": True
+            #         }))
+            #     return
 
             # Handle async iterator for live events
-            async for event in live_events:
-                try:
-                    part: Part = event.content.parts[0] if event.content and event.content.parts else None
-                    if not part:
+        async for event in live_events:
+            try:
+                print(f"[DEBUG] LIVE EVENT: {event}", flush=True)
+                part: Part = event.content.parts[0] if event.content and event.content.parts else None
+                if not part:
+                    continue
+
+                if part.inline_data and part.inline_data.mime_type.startswith("audio/pcm"):
+                    audio_data = part.inline_data.data
+                    if audio_data:
+                        await websocket.send_text(json.dumps({
+                            "mime_type": "audio/pcm",
+                            "data": base64.b64encode(audio_data).decode("ascii")
+                        }))
                         continue
 
-                    if part.inline_data and part.inline_data.mime_type.startswith("audio/pcm"):
-                        audio_data = part.inline_data.data
-                        if audio_data:
-                            await websocket.send_text(json.dumps({
-                                "mime_type": "audio/pcm",
-                                "data": base64.b64encode(audio_data).decode("ascii")
-                            }))
-                            continue
+                if part.text:
+                    if part.text not in buffer:
+                        buffer += part.text
 
-                    if part.text:
-                        if part.text not in buffer:
-                            buffer += part.text
+                    is_final = getattr(event, 'is_final_response', lambda: False)()
+                    current_time = asyncio.get_event_loop().time()
+                    if is_final:
+                        response_count += 1
+                        last_response_time = current_time
+                        await asyncio.sleep(1)
+                        
+                        if current_time == last_response_time:
+                            from opentelemetry.trace import set_span_in_context, SpanContext, TraceFlags, INVALID_SPAN_CONTEXT
 
-                        is_final = getattr(event, 'is_final_response', lambda: False)()
-                        current_time = asyncio.get_event_loop().time()
-                        if is_final:
-                            response_count += 1
-                            last_response_time = current_time
-                            await asyncio.sleep(1)
+                            parent_span_context = active_contexts.get(user_id)  # already a SpanContext
+
+                            if parent_span_context:
+                                from opentelemetry.trace import NonRecordingSpan, set_span_in_context
+                                parent_span = NonRecordingSpan(parent_span_context)
+                                new_ctx = set_span_in_context(parent_span)
+                            else:
+                                from opentelemetry.trace import INVALID_SPAN_CONTEXT
+                                new_ctx = set_span_in_context(NonRecordingSpan(INVALID_SPAN_CONTEXT))
                             
-                            if current_time == last_response_time:
+                            with tracer.start_as_current_span("completion", context=new_ctx) as span:
+                                span.set_attribute("output", buffer.strip())
+                                span.set_attribute("user_id", user_id)
+                                span.set_attribute("message_type", "assistant")
+                                span.set_attribute("output", buffer.strip())
+                                output_token_count = len(buffer.strip()) // 4
+                                span.set_attribute("gen_ai.usage.completion_tokens", int(output_token_count))
+                                span.set_attribute("gen_ai.usage.total_tokens", int(output_token_count))
+                                span.set_attribute("gen_ai.usage.cost", float(output_token_count * 0.00003))
+                                span.set_attribute("gen_ai.response.model", "gemini-2.0-flash-live-001")
+                                
                                 session_service.append_message(str(user_id), "assistant", buffer, message_type="messages", include_embedding=False)
                                 await websocket.send_text(json.dumps({
                                     "mime_type": "text/plain",
@@ -264,14 +295,14 @@ async def agent_to_client_messaging(websocket, live_events, user_id):
                                 buffer = ""
                                 response_count = 0
 
-                except Exception as e:
-                    span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
-                    logger.error(f"Processing stream event: {str(e)}")
-                    await websocket.send_text(json.dumps({
-                        "mime_type": "text/plain",
-                        "data": f"Error: {str(e)}",
-                        "error": True
-                    }))
+            except Exception as e:
+                #span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+                logger.error(f"Processing stream event: {str(e)}")
+                await websocket.send_text(json.dumps({
+                    "mime_type": "text/plain",
+                    "data": f"Error: {str(e)}",
+                    "error": True
+                }))
 
     except Exception as e:
         logger.error(f"Outer agent_to_client_messaging: {str(e)}")
@@ -285,19 +316,36 @@ async def agent_to_client_messaging(websocket, live_events, user_id):
 async def client_to_agent_messaging(websocket, user_id, live_request_queue):
     try:
         while True:
-            with tracer.start_as_current_span("user_message") as span:
+            
+            
                 message = await websocket.receive_text()
                 data = json.loads(message)
                 content = data.get("data", "")
                 
                 if data.get("mime_type") == "text/plain":
-                    session_service.append_message(str(user_id), "user", content, message_type="messages", include_embedding=False)
-                    context = get_top_k_context(content, user_id)
-                    full_input = "\n\n".join(context + [content])
-                    live_request_queue.send_content(Content(role="user", parts=[Part.from_text(text=full_input)]))
+                    with tracer.start_as_current_span("user_message") as span:
+                        span.set_attribute("user_id", user_id)
+                        span.set_attribute("message_type", "user")
+                        span_context = span.get_span_context()  # ✅ This is correct
+                        active_contexts[user_id] = span_context 
+                        # Set both attribute and event data
+                        span.set_attribute("message_content", content)
+                        span.set_attribute("input", content)
+                        input_token_count = len(content) // 4
+                        # Use proper OpenTelemetry Gen AI conventions
+                        span.set_attribute("gen_ai.usage.prompt_tokens", int(input_token_count))
+                        span.set_attribute("gen_ai.usage.total_tokens", int(input_token_count))
+                        span.set_attribute("gen_ai.usage.cost", float(input_token_count * 0.00001))
+                        span.set_attribute("gen_ai.request.model", "gemini-2.0-flash-live-001")
+                        
+                        session_service.append_message(str(user_id), "user", content, message_type="messages", include_embedding=False)
+                        context = get_top_k_context(content, user_id)
+                        full_input = "\n\n".join(context + [content])
+                        live_request_queue.send_content(Content(role="user", parts=[Part.from_text(text=full_input)]))
                 elif data.get("mime_type") == "audio/state":
+                    span.set_attribute("audio_state", data.get('is_recording', False))
                     logger.debug(f"Audio state change: is_recording={data.get('is_recording', False)}")
-                    
+                        
     except WebSocketDisconnect:
         logger.debug("WebSocket disconnected")
     except Exception as e:

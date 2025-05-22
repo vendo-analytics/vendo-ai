@@ -88,7 +88,7 @@ export function useADKWebSocket({
   const [isConnected, setIsConnected] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
-  const currentUtterance = useRef<SpeechSynthesisUtterance | null>(null);
+  const currentUtterance = useRef<HTMLAudioElement | null>(null);
   const reconnectTimeout = useRef<NodeJS.Timeout>();
   const reconnectAttempts = useRef(0);
   const MAX_RECONNECT_ATTEMPTS = 5;
@@ -190,30 +190,29 @@ export function useADKWebSocket({
             
             if (data.is_speech && callbacksRef.current.isAudioEnabled && 'speechSynthesis' in window) {
               if (!data.is_partial) {
-                console.log("[WS] Speaking text:", data.data);
-                if (currentUtterance.current) {
-                  window.speechSynthesis.cancel();
+                if (!data.is_partial) {
+                  console.log("[WS] Fetching TTS from server:", data.data);
+                  fetch("http://localhost:8000/speak", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ text: data.data }),
+                  })
+                    .then((res) => {
+                      if (!res.ok) throw new Error("TTS failed");
+                      return res.blob();
+                    })
+                    .then((blob) => {
+                      const audioUrl = URL.createObjectURL(blob);
+                      const audio = new Audio(audioUrl);
+                      currentUtterance.current = audio;
+                      audio.play();
+                    })
+                    .catch((err) => {
+                      console.error("TTS playback error:", err);
+                    });
                 }
-                const utterance = new SpeechSynthesisUtterance(data.data);
-                const voices = window.speechSynthesis.getVoices();
-                // Prefer a more human-like voice (Google voice if available)
-                const preferredVoice = voices.find(
-                  (v) =>
-                    v.name.toLowerCase().includes("google") &&
-                    v.lang === "en-US"
-                );
-
-                if (preferredVoice) {
-                  utterance.voice = preferredVoice;
-                }
-
-                // Adjust voice parameters
-                utterance.pitch = 1.2;   // More expressive
-                utterance.rate = 0.95;   // Slightly slower = more natural
-                utterance.volume = 1.0;  // Full volume
-
-                currentUtterance.current = utterance;
-                window.speechSynthesis.speak(utterance);
               }
             }
           }

@@ -34,6 +34,7 @@ from google.adk.agents import LiveRequestQueue
 from google.adk.agents.run_config import RunConfig
 from .firebase_client import FirestoreSessionService, embed_text
 from fastapi import FastAPI, WebSocket, Query
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi import WebSocketDisconnect
@@ -47,7 +48,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry import trace
-
+from .tts_service import router as tts_router
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -107,6 +108,18 @@ provider.add_span_processor(BatchSpanProcessor(
 trace.set_tracer_provider(provider)
 tracer = trace.get_tracer("agent_router", "1.0.0")
 
+app = FastAPI()
+
+# Add CORS middleware to the main app
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
+
+app.include_router(tts_router)
 
 APP_NAME = "ADK Streaming example"
 session_service = FirestoreSessionService(collection_name="vendo_ai_memory")
@@ -293,7 +306,7 @@ async def client_to_agent_messaging(websocket, user_id, live_request_queue):
         if span:
             span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
 
-app = FastAPI()
+
 
 @app.websocket("/ws/{session_id}")
 async def websocket_endpoint(

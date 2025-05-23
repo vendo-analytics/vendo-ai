@@ -180,6 +180,10 @@ export function useADKWebSocket({
 
           if (data.mime_type === "text/plain") {
             console.log("[WS] Processing text message:", data);
+            
+            // Stop any ongoing TTS when receiving a new message
+            stopTTS();
+            
             onTextMessage(data.data, data.turn_complete, data.is_partial, "assistant");
             
             // Only add complete messages to history
@@ -190,29 +194,27 @@ export function useADKWebSocket({
             
             if (data.is_speech && callbacksRef.current.isAudioEnabled && 'speechSynthesis' in window) {
               if (!data.is_partial) {
-                if (!data.is_partial) {
-                  console.log("[WS] Fetching TTS from server:", data.data);
-                  fetch("http://localhost:8000/speak", {
-                    method: "POST",
-                    headers: {
-                      "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({ text: data.data }),
+                console.log("[WS] Fetching TTS from server:", data.data);
+                fetch("http://localhost:8000/speak", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({ text: data.data }),
+                })
+                  .then((res) => {
+                    if (!res.ok) throw new Error("TTS failed");
+                    return res.blob();
                   })
-                    .then((res) => {
-                      if (!res.ok) throw new Error("TTS failed");
-                      return res.blob();
-                    })
-                    .then((blob) => {
-                      const audioUrl = URL.createObjectURL(blob);
-                      const audio = new Audio(audioUrl);
-                      currentUtterance.current = audio;
-                      audio.play();
-                    })
-                    .catch((err) => {
-                      console.error("TTS playback error:", err);
-                    });
-                }
+                  .then((blob) => {
+                    const audioUrl = URL.createObjectURL(blob);
+                    const audio = new Audio(audioUrl);
+                    currentUtterance.current = audio;
+                    audio.play();
+                  })
+                  .catch((err) => {
+                    console.error("TTS playback error:", err);
+                  });
               }
             }
           }
@@ -282,26 +284,49 @@ export function useADKWebSocket({
     }
   }, [connect]);
 
-  const sendUserMessage = useCallback((text: string) => {
-    console.log("[WS] sendUserMessage called with:", text);
-    // Add user message to conversation history
-    const userMessage: Message = { role: "user", content: text };
-    console.log("[WS] Adding message to history:", userMessage);
-    console.log("[WS] Previous history:", conversationHistory.current);
-    
-    const updatedHistory = [...conversationHistory.current, userMessage];
-    console.log("[WS] Updated history to send:", updatedHistory);
-    
-    sendMessage({
-      mime_type: "text/plain",
-      data: text,
-      history: updatedHistory
-    });
-    
-    // Only update history after successful send
-    conversationHistory.current = updatedHistory;
-    console.log("[WS] History updated:", conversationHistory.current);
-  }, [sendMessage]);
+  // Add function to stop TTS
+  const stopTTS = useCallback(() => {
+    // Stop current audio playback
+    if (currentUtterance.current) {
+      currentUtterance.current.pause();
+      currentUtterance.current = null;
+    }
+  }, []);
+
+  const sendUserMessage = useCallback(async (message: string) => {
+    if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
+      console.error("[WS] WebSocket not connected");
+      return;
+    }
+
+    // Stop any ongoing TTS when sending a new message
+    stopTTS();
+
+    try {
+      const messageData = {
+        mime_type: "text/plain",
+        data: message,
+        source: "user"
+      };
+      
+      // Add message to conversation history
+      const userMessage: Message = { role: "user", content: message };
+      console.log("[WS] Adding message to history:", userMessage);
+      console.log("[WS] Previous history:", conversationHistory.current);
+      
+      const updatedHistory = [...conversationHistory.current, userMessage];
+      console.log("[WS] Updated history to send:", updatedHistory);
+      
+      // Send the message
+      ws.current.send(JSON.stringify(messageData));
+      
+      // Only update history after successful send
+      conversationHistory.current = updatedHistory;
+      console.log("[WS] History updated:", conversationHistory.current);
+    } catch (error) {
+      console.error("[WS] Failed to send message:", error);
+    }
+  }, [stopTTS]);
 
   // Clean up on unmount
   useEffect(() => {

@@ -118,7 +118,7 @@ class FirestoreSessionService(BaseSessionService):
             return doc.to_dict().get("messages", [])
         return []
     
-    def get_all_message_embeddings(self, user_id: str, message_type: str = "requirements"):
+    def get_all_messages(self, user_id: str, message_type: str = "requirements"):
         doc = self.collection.document(user_id).get()
         if not doc.exists:
             return []
@@ -134,6 +134,8 @@ class FirestoreSessionService(BaseSessionService):
                 })
 
         return result
+    
+
     
 def embed_text(content: str) -> List[float]:
     client = genai.Client()

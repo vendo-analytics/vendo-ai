@@ -24,6 +24,7 @@ from .prompts import (
     GOOGLE_SEARCH_AGENT_INSTRUCTION,
     BIGQUERY_QUERY_RUNNER_AGENT_INSTRUCTION,
     GET_BIGQUERY_QUERY_AGENT_INSTRUCTION,
+    ROOT_AGENT_INSTRUCTION_X,
 )
 
 
@@ -60,18 +61,7 @@ google_search_agent = Agent(
 # 3. Root orchestration agent
 # ────────────────────────────────────────────────────────────────────────────
 
-root_agent_x = Agent(
-    name="agent_router",
-    model="gemini-2.0-flash",
-    description="Job is to route the user's request to the right sub-agent.",
-    instruction=ROOT_AGENT_INSTRUCTION,
-    sub_agents=[
-        get_bigquery_query_agent,
-    ],
-    tools=[
-        AgentTool(agent=google_search), 
-    ]
-)
+
 import asyncio
 from typing import AsyncGenerator
 
@@ -90,5 +80,13 @@ root_agent = Agent(
     tools=[google_search,
          query_bigquery
     ]# Enable tool output formatting
+)
+
+root_agent_x = Agent(
+    name="factual_search_agent",
+    model="gemini-2.0-flash-live-001",
+    description="Answers factual questions using the google_search tool.",
+    instruction=ROOT_AGENT_INSTRUCTION_X,
+    tools=[google_search],  # Only this tool is allowed
 )
 

@@ -147,6 +147,26 @@ def start_agent_session(session_id, user_id):
     )
     return live_events, live_request_queue
 
+
+def get_context(user_query: str, user_id: str, k=3, min_similarity=0.0):
+    try:
+        print(f"[DEBUG] User query: {user_query}", flush=True)
+    except Exception as e:
+        print(f"[ERROR] Failed to process user query: {e}")
+        return []
+
+    messages = session_service.get_all_messages(user_id)  # Changed from get_all_message_embeddings
+    if not messages:
+        return []
+    
+    # Simply return the content from all messages, up to k messages
+    contents = []
+    for msg in messages:
+        if msg.get("content"):
+            contents.append(msg["content"])
+    
+    return contents[:k]  # Return only up to k messages
+
 def get_top_k_context(user_query: str, user_id: str, k=3, min_similarity=0.0):
     try:
         print(f"[DEBUG] User query: {user_query}", flush=True)
@@ -156,7 +176,7 @@ def get_top_k_context(user_query: str, user_id: str, k=3, min_similarity=0.0):
         print(f"[ERROR] Failed to embed user query: {e}")
         return []
 
-    messages = session_service.get_all_message_embeddings(user_id)
+    messages = session_service.get_all_messages(user_id)
     if not messages:
         return []
     scored = []
@@ -323,10 +343,10 @@ async def client_to_agent_messaging(websocket, user_id, live_request_queue):
                 
                 if data.get("mime_type") == "text/plain":
                     with tracer.start_as_current_span("user_message") as span:
-                        span.set_attribute("user_id", user_id)
-                        span.set_attribute("message_type", "user")
                         span_context = span.get_span_context()  # ✅ This is correct
                         active_contexts[user_id] = span_context 
+                        span.set_attribute("user_id", user_id)
+                        span.set_attribute("message_type", "user")
                         # Set both attribute and event data
                         span.set_attribute("message_content", content)
                         span.set_attribute("input", content)
@@ -337,7 +357,7 @@ async def client_to_agent_messaging(websocket, user_id, live_request_queue):
                         span.set_attribute("gen_ai.request.model", "gemini-2.0-flash-live-001")
                         
                         session_service.append_message(str(user_id), "user", content, message_type="messages", include_embedding=False)
-                        context = get_top_k_context(content, user_id)
+                        context = get_context(content, user_id)
                         full_input = "\n\n".join(context + [content])
                         live_request_queue.send_content(Content(role="user", parts=[Part.from_text(text=full_input)]))
                 elif data.get("mime_type") == "audio/state":

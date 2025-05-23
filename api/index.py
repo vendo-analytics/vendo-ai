@@ -52,7 +52,7 @@ from .tts_service import router as tts_router
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
-
+from opentelemetry.trace import set_span_in_context, SpanContext, TraceFlags, INVALID_SPAN_CONTEXT
 # Load environment variables
 load_dotenv()
 PUSH_CHAT_TO_FIREBASE = False
@@ -96,6 +96,44 @@ exporter = LoggingExporter(
     headers=OTEL_HEADERS,
     timeout=30
 )
+def is_final_answer(event):
+    print(f"[DEBUG] Event type: {type(event)}", flush=True)
+    print(f"[DEBUG] Event dir: {dir(event)}", flush=True)
+
+    content = getattr(event, "content", None)
+    if not content:
+        print("[FAIL] missing content")
+        return False
+
+    role = getattr(content, "role", None)
+    print(f"[DEBUG] role (from content): {role}", flush=True)
+
+    if role != "model":
+        print("[FAIL] role check failed")
+        return False
+
+    partial = getattr(event, "partial", None)
+    print(f"[DEBUG] partial: {partial}", flush=True)
+
+    if partial:
+        print("[FAIL] partial check failed")
+        return False
+
+    parts = getattr(content, "parts", None)
+    if not parts or not hasattr(parts[0], "text"):
+        print("[FAIL] no parts or no text attribute in first part")
+        return False
+
+    text = parts[0].text
+    print(f"[DEBUG] text: {repr(text)}", flush=True)
+
+    if not text:
+        print("[FAIL] text is empty or whitespace")
+        return False
+
+    print("[PASS] Final answer detected")
+    return True
+
 
 # Add error handler for the exporter
 def export_error_handler(error):
@@ -253,10 +291,59 @@ async def agent_to_client_messaging(websocket, live_events, user_id):
             #     return
 
             # Handle async iterator for live events
+        buffer = ""
+        response_count = 0
+        final_message_seen = False
+        turn_complete_flag = False
+
         async for event in live_events:
             try:
                 print(f"[DEBUG] LIVE EVENT: {event}", flush=True)
-                part: Part = event.content.parts[0] if event.content and event.content.parts else None
+
+                # 🔍 Detect turn completion
+                if getattr(event, "turn_complete", False):
+                    print("[DEBUG] Turn complete detected")
+                    turn_complete_flag = True
+
+                    if final_message_seen and buffer:
+                        # 🧠 Prepare tracing context
+                        parent_span_context = active_contexts.get(user_id)
+                        from opentelemetry.trace import NonRecordingSpan, set_span_in_context, INVALID_SPAN_CONTEXT
+                        if parent_span_context:
+                            parent_span = NonRecordingSpan(parent_span_context)
+                            new_ctx = set_span_in_context(parent_span)
+                        else:
+                            new_ctx = set_span_in_context(NonRecordingSpan(INVALID_SPAN_CONTEXT))
+
+                        # 📤 Send final message + span
+                        with tracer.start_as_current_span("completion", context=new_ctx) as span:
+                            cleaned_buffer = buffer.strip()
+                            span.set_attribute("output", cleaned_buffer)
+                            span.set_attribute("user_id", user_id)
+                            span.set_attribute("message_type", "assistant")
+                            output_token_count = len(cleaned_buffer) // 4
+                            span.set_attribute("gen_ai.usage.completion_tokens", output_token_count)
+                            span.set_attribute("gen_ai.usage.total_tokens", output_token_count)
+                            span.set_attribute("gen_ai.response.model", "gemini-2.0-flash-live-001")
+
+                            session_service.append_message(str(user_id), "assistant", buffer, message_type="messages", include_embedding=False)
+
+                            await websocket.send_text(json.dumps({
+                                "mime_type": "text/plain",
+                                "data": buffer,
+                                "is_speech": True,
+                                "turn_complete": True,
+                                "interrupted": False
+                            }))
+                        
+                        # 🔄 Reset state
+                        buffer = ""
+                        final_message_seen = False
+                        turn_complete_flag = False
+                    continue
+
+                # 🧩 Process text parts
+                part = event.content.parts[0] if event.content and event.content.parts else None
                 if not part:
                     continue
 
@@ -267,55 +354,17 @@ async def agent_to_client_messaging(websocket, live_events, user_id):
                             "mime_type": "audio/pcm",
                             "data": base64.b64encode(audio_data).decode("ascii")
                         }))
-                        continue
+                    continue
 
-                if part.text:
-                    if part.text not in buffer:
-                        buffer += part.text
+                if part.text and part.text not in buffer:
+                    buffer += part.text
 
-                    is_final = getattr(event, 'is_final_response', lambda: False)()
-                    current_time = asyncio.get_event_loop().time()
-                    if is_final:
-                        response_count += 1
-                        last_response_time = current_time
-                        await asyncio.sleep(1)
-                        
-                        if current_time == last_response_time:
-                            from opentelemetry.trace import set_span_in_context, SpanContext, TraceFlags, INVALID_SPAN_CONTEXT
-
-                            parent_span_context = active_contexts.get(user_id)  # already a SpanContext
-
-                            if parent_span_context:
-                                from opentelemetry.trace import NonRecordingSpan, set_span_in_context
-                                parent_span = NonRecordingSpan(parent_span_context)
-                                new_ctx = set_span_in_context(parent_span)
-                            else:
-                                from opentelemetry.trace import INVALID_SPAN_CONTEXT
-                                new_ctx = set_span_in_context(NonRecordingSpan(INVALID_SPAN_CONTEXT))
-                            
-                            with tracer.start_as_current_span("completion", context=new_ctx) as span:
-                                span.set_attribute("output", buffer.strip())
-                                span.set_attribute("user_id", user_id)
-                                span.set_attribute("message_type", "assistant")
-                                span.set_attribute("output", buffer.strip())
-                                output_token_count = len(buffer.strip()) // 4
-                                span.set_attribute("gen_ai.usage.completion_tokens", int(output_token_count))
-                                span.set_attribute("gen_ai.usage.total_tokens", int(output_token_count))
-                                span.set_attribute("gen_ai.response.model", "gemini-2.0-flash-live-001")
-                                
-                                session_service.append_message(str(user_id), "assistant", buffer, message_type="messages", include_embedding=False)
-                                await websocket.send_text(json.dumps({
-                                    "mime_type": "text/plain",
-                                    "data": buffer,
-                                    "is_speech": True,
-                                    "turn_complete": True,
-                                    "interrupted": False
-                                }))
-                                buffer = ""
-                                response_count = 0
+                is_final = getattr(event, 'is_final_response', lambda: False)()
+                is_final_manual = is_final_answer(event)
+                if is_final and is_final_manual:
+                    final_message_seen = True
 
             except Exception as e:
-                #span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
                 logger.error(f"Processing stream event: {str(e)}")
                 await websocket.send_text(json.dumps({
                     "mime_type": "text/plain",

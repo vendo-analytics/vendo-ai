@@ -32,7 +32,7 @@ from google.genai.types import (
 from google.adk.runners import Runner
 from google.adk.agents import LiveRequestQueue
 from google.adk.agents.run_config import RunConfig
-from .firebase_client import FirestoreSessionService, embed_text
+from firebase_client import FirestoreSessionService, embed_text
 from fastapi import FastAPI, WebSocket, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -41,14 +41,14 @@ from fastapi import WebSocketDisconnect
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 
-from .agents.agents import root_agent, root_agent_x
+from agents.agents import root_agent
 from opentelemetry import trace
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry import trace
-from .tts_service import router as tts_router
+from tts_service import router as tts_router
 
 from fastapi import Request
 from fastapi.responses import PlainTextResponse
@@ -176,7 +176,7 @@ def start_agent_session(session_id, user_id):
     )
     runner = Runner(
         app_name=APP_NAME,
-        agent=root_agent_x,
+        agent=root_agent,
         session_service=session_service
     )
     run_config = RunConfig(response_modalities=["text"])
@@ -426,61 +426,6 @@ async def client_to_agent_messaging(websocket, user_id, live_request_queue):
 
 
 
-@app.websocket("/ws/{session_id}")
-async def websocket_endpoint(
-    websocket: WebSocket,
-    session_id: int,
-    user_id: str = Query(...),
-):
-    
-    try:
-        await websocket.accept()
-        print(f"Client #{session_id} connected (User: {user_id})", flush=True)
-        
-        # Create one session and runner for the entire WebSocket connection
-        session = session_service.create_session(
-            app_name=APP_NAME,
-            user_id=user_id,
-            session_id=str(session_id),
-        )
-        
-        runner = Runner(
-            app_name=APP_NAME,
-            agent=root_agent,
-            session_service=session_service
-        )
-        
-        # Create initial run config
-        run_config = RunConfig(response_modalities=["text"])
-        
-        print(f"[DEBUG] Created session and runner for WebSocket connection", flush=True)
-        
-        # Create a shared request queue
-        live_request_queue = LiveRequestQueue()
-        live_events = runner.run_live(
-            session=session,
-            live_request_queue=live_request_queue,
-            run_config=run_config,
-        )
-        
-        # Pass the shared session, runner, and request queue to the message handlers
-        agent_to_client_task = asyncio.create_task(
-            agent_to_client_messaging(websocket, live_events, user_id)
-        )
-        client_to_agent_task = asyncio.create_task(
-            client_to_agent_messaging(websocket, user_id, live_request_queue)
-        )
-        await asyncio.gather(agent_to_client_task, client_to_agent_task)
-    except Exception as e:
-        print(f"Error in websocket endpoint: {e}", flush=True)
-        await websocket.send_text(json.dumps({
-            "mime_type": "text/plain",
-            "data": f"Error in websocket endpoint: {str(e)}",
-            "error": True
-        }))
-    finally:
-        print(f"Client #{session_id} disconnected", flush=True)
-
 @app.get("/api/chat/history")
 async def get_chat_history(user_id: str = Query(...)):
     try:
@@ -490,35 +435,75 @@ async def get_chat_history(user_id: str = Query(...)):
     except Exception as e:
         print(f"[ERROR] Failed to get chat history: {str(e)}", flush=True)
         return {"error": str(e)}, 500
-
+import httpx
 @app.post("/slack/command")
 async def slack_command(request: Request):
     form = await request.form()
     user_text = form.get("text")
-    print(f"[DEBUG] Slack command received: {user_text}", flush=True)
-    user_id = form.get("user_id", "slack-user")  # fallback ID
+    user_id = form.get("user_id", "slack-user")
+    response_url = form.get("response_url")
     session_id = f"slack-session-{user_id}"
 
-    # 🌟 Prepare session
-    live_events, request_queue = start_agent_session(session_id=session_id, user_id=user_id)
+    # Respond quickly to Slack (must be <3s)
+    asyncio.create_task(handle_agent_response(user_text, user_id, session_id, response_url))
+    return PlainTextResponse("🧠 Thinking... Vendo is on it!")
 
-    # 🧠 Get context and send message
-    context = get_context(user_text, user_id)
-    full_input = "\n\n".join(context + [user_text])
-    request_queue.send_content(Content(role="user", parts=[Part.from_text(text=full_input)]))
+async def handle_agent_response(user_text: str, user_id: str, session_id: str, response_url: str):
+    try:
+        # 1. Start Gemini agent session
+        live_events, request_queue = start_agent_session(session_id=session_id, user_id=user_id)
 
-    # 🔁 Wait for response
-    response_text = ""
-    
-    async for event in live_events:
-        part = event.content.parts[0] if event.content and event.content.parts else None
-        if part and part.text:
-            response_text += part.text
-            print(f"[DEBUG] Response text: {response_text}", flush=True)
+        # 2. Get context and queue message
+        context = get_context(user_text, user_id)
+        full_input = "\n\n".join(context + [user_text])
+        request_queue.send_content(Content(role="user", parts=[Part.from_text(text=full_input)]))
 
-        is_final = getattr(event, "is_final_response", lambda: False)()
-        is_final_manual = is_final_answer(event)
-        if is_final and is_final_manual:
-            break  # Done after final message
-        print(f"[DEBUG] Response text: {response_text}", flush=True)
-    return PlainTextResponse(response_text or "No response from agent.")
+        # 3. Collect streamed response
+        response_text = ""
+        async for event in live_events:
+            print(f"Event ID: {event.id}, Author: {event.author}")
+
+            # --- Check for specific parts FIRST ---
+            has_specific_part = False
+            if event.content and event.content.parts:
+                for part in event.content.parts:  # Iterate through all parts
+                    if part.executable_code:
+                        # Access the actual code string via .code
+                        print(
+                            f"  Debug: Agent generated code:\n```python\n{part.executable_code.code}\n```"
+                        )
+                        has_specific_part = True
+                    elif part.code_execution_result:
+                        # Access outcome and output correctly
+                        print(
+                            f"  Debug: Code Execution Result: {part.code_execution_result.outcome} - Output:\n{part.code_execution_result.output}"
+                        )
+                        has_specific_part = True
+                    # Also print any text parts found in any event for debugging
+                    elif part.text and not part.text.isspace():
+                        print(f"  Text: '{part.text.strip()}'")
+                        # Do not set has_specific_part=True here, as we want the final response logic below
+
+            # --- Check for final response AFTER specific parts ---
+            # Only consider it final if it doesn't have the specific code parts we just handled
+            if not has_specific_part and event.is_final_response():
+                if (
+                    event.content
+                    and event.content.parts
+                    and event.content.parts[0].text
+                ):
+                    final_response_text = event.content.parts[0].text.strip()
+                    print(f"==> Final Agent Response: {final_response_text}")
+                    async with httpx.AsyncClient() as client:
+                        await client.post(response_url, json={"text": final_response_text or "🤖 (No response from the agent)"})
+                    #return final_response_text
+                else:
+                    print("==> Final Agent Response: [No text content in final event]")
+
+        # 4. Post final result back to Slack
+        async with httpx.AsyncClient() as client:
+            await client.post(response_url, json={"text": final_response_text or "🤖 (No response from the agent)"})
+
+    except Exception as e:
+        async with httpx.AsyncClient() as client:
+            await client.post(response_url, json={"text": f"⚠️ Error: {str(e)}"})

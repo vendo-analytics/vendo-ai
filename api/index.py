@@ -132,7 +132,7 @@ def is_final_answer(event):
 
     if not text:
         print("[FAIL] text is empty or whitespace")
-        return False
+        #return False
 
     print("[PASS] Final answer detected")
     return True
@@ -297,7 +297,7 @@ async def agent_to_client_messaging(websocket, live_events, user_id):
         buffer = ""
         response_count = 0
         final_message_seen = False
-        turn_complete_flag = False
+        turn_complete_flag = True
 
         async for event in live_events:
             try:

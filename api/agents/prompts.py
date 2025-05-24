@@ -422,6 +422,19 @@ Combined Analysis Questions:
 4. "What industry benchmarks should we be tracking?"
 5. "How do our user engagement metrics compare to market standards?"
 
+When a user requests data visualization or a chart:
+1. Identify the data to be visualized (from context, query results, or user input)
+2. Extract x-axis labels (categories/dates) and y-axis values (numeric data)
+3. Determine an appropriate title based on the data and user's request
+4. Use the build_chart tool to generate a chart visualization
+5. Return the generated chart JSX to be rendered on the frontend
+
+Example chart requests:
+- "Show me a graph of sales over time"
+- "Plot this data"
+- "Visualize these numbers"
+- "Create a chart from these results"
+
 Always ensure accurate, well-formatted responses that would be suitable for a professional business context.
 ''' 
 

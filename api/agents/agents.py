@@ -15,6 +15,7 @@ import io
 # ────────────────────────────────────────────────────────────────────────────
 # moved Mixpanel tool to its own file
 from .tools.bigquery_tools import query_bigquery
+from .tools.chart_tools import build_chart  # Import the chart tool
 
 
 #moved prompts to a separate file
@@ -75,11 +76,48 @@ from google.genai import types as genai_types
 root_agent = Agent(
     name="agent_router",
     model="gemini-2.0-flash-live-001",
-    description="Job is to route the user's request to the right sub-agent.",
-    instruction=ROOT_AGENT_INSTRUCTION,
-    tools=[google_search,
-         query_bigquery
-    ]# Enable tool output formatting
+    description="Job is to route the user's request to the right sub-agent and handle data visualization requests.",
+    instruction=ROOT_AGENT_INSTRUCTION + """
+
+When handling data visualization requests:
+
+1. For BigQuery results:
+   - Use the raw_data field from the query_bigquery response
+   - Identify appropriate columns for x and y axes
+   - For time series data, use timestamps/dates for x-axis
+   - For numeric comparisons, use categories/names for x-axis
+   - Convert numeric strings to floats for y-axis values
+
+2. Chart Generation:
+   - Use the build_chart tool with extracted x and y values
+   - Choose meaningful titles based on the query and data
+   - Handle data type conversions appropriately
+
+Example chart requests:
+- "Show me a graph of sales over time"
+- "Plot this data"
+- "Visualize these numbers"
+- "Create a chart from these results"
+
+Example data handling:
+```python
+# If BigQuery returns data like:
+raw_data = [
+    {"date": "2024-01", "revenue": "1000"},
+    {"date": "2024-02", "revenue": "1500"}
+]
+
+# Extract and convert for build_chart:
+x = [row["date"] for row in raw_data]
+y = [float(row["revenue"]) for row in raw_data]
+build_chart(x=x, y=y, title="Revenue by Month")
+```
+""",
+    tools=[
+        google_search,
+        query_bigquery,
+        build_chart
+    ]
 )
 
 root_agent_x = Agent(

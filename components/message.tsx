@@ -8,6 +8,15 @@ import { Markdown } from "./markdown";
 import { PreviewAttachment } from "./preview-attachment";
 import { cn } from "@/lib/utils";
 import { Weather } from "./weather";
+import dynamic from 'next/dynamic';
+
+// Dynamically import ChartEmbed to avoid SSR issues with Recharts
+const ChartEmbed = dynamic(() => import('./ChartEmbed'), { ssr: false });
+
+// Helper function to detect if content contains a chart
+const isChartContent = (content: string): boolean => {
+  return content.includes('<LineChart') && content.includes('data=');
+};
 
 export const PreviewMessage = ({
   message,
@@ -37,7 +46,11 @@ export const PreviewMessage = ({
         <div className="flex flex-col gap-2 w-full">
           {message.content && (
             <div className="flex flex-col gap-4">
-              <Markdown>{message.content as string}</Markdown>
+              {isChartContent(message.content) ? (
+                <ChartEmbed chartJsx={message.content} />
+              ) : (
+                <Markdown>{message.content as string}</Markdown>
+              )}
             </div>
           )}
 

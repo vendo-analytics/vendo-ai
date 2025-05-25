@@ -15,7 +15,10 @@ const ChartEmbed = dynamic(() => import('./ChartEmbed'), { ssr: false });
 
 // Helper function to detect if content contains a chart
 const isChartContent = (content: string): boolean => {
-  return content.includes('<LineChart') && content.includes('data=');
+  return (
+    (content.includes('<LineChart') || content.includes('<BarChart') || content.includes('<ScatterChart')) 
+    && content.includes('data=')
+  );
 };
 
 export const PreviewMessage = ({
@@ -49,7 +52,7 @@ export const PreviewMessage = ({
               {isChartContent(message.content) ? (
                 <ChartEmbed chartJsx={message.content} />
               ) : (
-                <Markdown>{message.content as string}</Markdown>
+              <Markdown>{message.content as string}</Markdown>
               )}
             </div>
           )}

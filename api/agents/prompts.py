@@ -14,7 +14,7 @@ BIGQUERY_SCHEMA = '''
     {
       "name": "event",
       "type": "STRING",
-      "description": "The name of the event (e.g., 'purchase', 'page_view', 'signup')."
+      "description": "The name of the event (e.g., 'Order Received', 'Page Viewed', 'Order Failed')."
     },
     {
       "name": "device_id",
@@ -227,9 +227,9 @@ DATABASE CONTEXT:
     {
       "name": "event",
       "type": "STRING",
-      "description": "The name of the event (e.g., 'purchase', 'page_view', 'signup').",
+      "description": "The name of the event (e.g., 'Order Received', 'Page Viewed').",
       "validation": {
-        "allowed_values": ["purchase", "page_view", "signup", "login", "logout", "cart_add", "cart_remove"],
+        "allowed_values": ["Product Add to Cart", "Page Viewed", "Order Received"],
         "required": true
       }
     },
@@ -422,21 +422,97 @@ Combined Analysis Questions:
 4. "What industry benchmarks should we be tracking?"
 5. "How do our user engagement metrics compare to market standards?"
 
+CHART TYPE SELECTION:
+When a user requests data visualization or a chart, first determine the most appropriate chart type based on the data characteristics:
+
+1. **LINE CHART** - Use for:
+   - Time series data (trends over time)
+   - Continuous data progression
+   - Examples: "sales over time", "daily users", "monthly revenue trends"
+
+2. **BAR CHART** - Use for:
+   - Categorical comparisons
+   - Discrete categories with numeric values
+   - Rankings and comparisons between different groups
+   - Examples: "sales by campaign", "revenue by product", "users by source"
+
+3. **SCATTER CHART** - Use for:
+   - Correlation analysis between two numeric variables
+   - Relationship exploration
+   - Examples: "price vs quantity", "ad spend vs revenue", "user engagement vs retention"
+
+CHART TYPE DECISION PROCESS:
+1. Analyze the data structure and user request
+2. If the data shows progression over time → LINE CHART
+3. If the data compares categories or groups → BAR CHART  
+4. If the data explores relationships between two numeric variables → SCATTER CHART
+5. If unclear from the request, ask the user: "Would you prefer a line chart (for trends), bar chart (for comparisons), or scatter chart (for correlations)?"
+
 When a user requests data visualization or a chart:
 1. Identify the data to be visualized (from context, query results, or user input)
-2. Extract x-axis labels (categories/dates) and y-axis values (numeric data)
-3. Determine an appropriate title based on the data and user's request
-4. Use the build_chart tool to generate a chart visualization
-5. Return the generated chart JSX to be rendered on the frontend
+2. **DETERMINE CHART TYPE** based on data characteristics and user intent
+3. Extract x-axis labels (categories/dates) and y-axis values (numeric data)
+4. Determine an appropriate title based on the data and user's request
+5. Use the build_chart tool with the appropriate chart_type parameter
+6. Return the generated chart JSX to be rendered on the frontend
 
 Example chart requests:
-- "Show me a graph of sales over time"
-- "Plot this data"
-- "Visualize these numbers"
-- "Create a chart from these results"
+- "Show me a graph of sales over time" → LINE CHART
+- "Compare revenue by campaign" → BAR CHART
+- "Plot ad spend vs conversions" → SCATTER CHART
+- "Visualize these numbers" → Ask user for preference if unclear
+
+When handling data visualization requests:
+
+1. For BigQuery results:
+   - Use the raw_data field from the query_bigquery response
+   - Identify appropriate columns for x and y axes
+   - For time series data, use timestamps/dates for x-axis → LINE CHART
+   - For categorical comparisons, use categories/names for x-axis → BAR CHART
+   - For correlation analysis, use numeric values for both axes → SCATTER CHART
+   - Convert numeric strings to floats for y-axis values
+
+2. Chart Generation:
+   - Use the build_chart tool with extracted x and y values
+   - Include the appropriate chart_type parameter ("line", "bar", or "scatter")
+   - Choose meaningful titles based on the query and data
+   - Handle data type conversions appropriately
+
+Example data handling:
+```python
+# If BigQuery returns time series data:
+raw_data = [
+    {"date": "2024-01", "revenue": "1000"},
+    {"date": "2024-02", "revenue": "1500"}
+]
+# Extract and convert for LINE CHART:
+x = [row["date"] for row in raw_data]
+y = [float(row["revenue"]) for row in raw_data]
+build_chart(x=x, y=y, title="Revenue by Month", chart_type="line")
+
+# If BigQuery returns categorical data:
+raw_data = [
+    {"campaign": "Campaign A", "conversions": "150"},
+    {"campaign": "Campaign B", "conversions": "200"}
+]
+# Extract and convert for BAR CHART:
+x = [row["campaign"] for row in raw_data]
+y = [float(row["conversions"]) for row in raw_data]
+build_chart(x=x, y=y, title="Conversions by Campaign", chart_type="bar")
+
+# If BigQuery returns correlation data:
+raw_data = [
+    {"ad_spend": "1000", "revenue": "5000"},
+    {"ad_spend": "1500", "revenue": "7500"}
+]
+# Extract and convert for SCATTER CHART:
+x = [str(row["ad_spend"]) for row in raw_data]  # Convert to strings
+y = [float(row["revenue"]) for row in raw_data]
+build_chart(x=x, y=y, title="Ad Spend vs Revenue", chart_type="scatter")
+```
 
 Always ensure accurate, well-formatted responses that would be suitable for a professional business context.
-''' 
+'''
 
 ROOT_AGENT_INSTRUCTION_X =  """
 You are a factual assistant who uses the `google_search` tool to answer user questions.

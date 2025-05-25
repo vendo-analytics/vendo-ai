@@ -311,18 +311,18 @@ export function useADKWebSocket({
       
       // Add message to conversation history
       const userMessage: Message = { role: "user", content: message };
-      console.log("[WS] Adding message to history:", userMessage);
-      console.log("[WS] Previous history:", conversationHistory.current);
-      
-      const updatedHistory = [...conversationHistory.current, userMessage];
-      console.log("[WS] Updated history to send:", updatedHistory);
-      
+    console.log("[WS] Adding message to history:", userMessage);
+    console.log("[WS] Previous history:", conversationHistory.current);
+    
+    const updatedHistory = [...conversationHistory.current, userMessage];
+    console.log("[WS] Updated history to send:", updatedHistory);
+    
       // Send the message
       ws.current.send(JSON.stringify(messageData));
-      
-      // Only update history after successful send
-      conversationHistory.current = updatedHistory;
-      console.log("[WS] History updated:", conversationHistory.current);
+    
+    // Only update history after successful send
+    conversationHistory.current = updatedHistory;
+    console.log("[WS] History updated:", conversationHistory.current);
     } catch (error) {
       console.error("[WS] Failed to send message:", error);
     }

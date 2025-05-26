@@ -1,43 +1,30 @@
-import "./globals.css";
-import { GeistSans } from "geist/font/sans";
-import { Toaster } from "sonner";
-import { cn } from "@/lib/utils";
-import { Navbar } from "@/components/navbar";
+import type React from "react"
+import type { Metadata } from "next"
+import { Inter } from 'next/font/google'
+import "./globals.css"
+import { Toaster } from "sonner"
+import { SidebarProvider } from "@/components/ui/sidebar"
 
-export const metadata = {
-  title: "AI SDK Python Streaming Preview",
-  description:
-    "Use the Data Stream Protocol to stream chat completions from a Python endpoint (FastAPI) and display them using the useChat hook in your Next.js application.",
-  openGraph: {
-    images: [
-      {
-        url: "/og?title=AI SDK Python Streaming Preview",
-      },
-    ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    images: [
-      {
-        url: "/og?title=AI SDK Python Streaming Preview",
-      },
-    ],
-  },
-};
+const inter = Inter({ subsets: ["latin"] })
+
+export const metadata: Metadata = {
+  title: "AI Chat with Knowledge Base",
+  description: "Chat interface with integrated knowledge base sidebar",
+}
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: React.ReactNode
 }) {
   return (
     <html lang="en">
-      <head></head>
-      <body className={cn(GeistSans.className, "antialiased dark")}>
-        <Toaster position="top-center" richColors />
-        <Navbar />
-        {children}
+      <body className={inter.className}>
+        <SidebarProvider>          {/* ✅ Already wrapping children */}
+          {children}
+          <Toaster position="top-center" />
+        </SidebarProvider>
       </body>
     </html>
-  );
+  )
 }

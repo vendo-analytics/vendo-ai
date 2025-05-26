@@ -22,14 +22,14 @@ import { AudioToggle } from "./AudioToggle";
 
 const suggestedActions = [
   {
-    title: "What is the weather",
-    label: "in San Francisco?",
-    action: "What is the weather in San Francisco?",
+    title: "How many sales did I get",
+    label: "in 2025?",
+    action: "How many sales did I get in 2025?",
   },
   {
-    title: "How is python useful",
-    label: "for AI engineers?",
-    action: "How is python useful for AI engineers?",
+    title: "How many page views",
+    label: "took place over the last 30 days?",
+    action: "How many page views took place over the last 30 days?",
   },
 ];
 
@@ -148,10 +148,18 @@ export function MultimodalInput({
               <Button
                 variant="ghost"
                 onClick={async () => {
-                  await append({
-                    role: "user",
-                    content: suggestedAction.action,
-                  });
+                  if (isLoading) {
+                    toast.error("Please wait for the model to finish its response!");
+                    return;
+                  }
+                  
+                  // Set the input value and submit it like a normal user message
+                  setInput(suggestedAction.action);
+                  
+                  // Use setTimeout to ensure the input is set before submitting
+                  setTimeout(() => {
+                    handleSubmit();
+                  }, 0);
                 }}
                 className="text-left border rounded-xl px-4 py-3.5 text-sm flex-1 gap-1 sm:flex-col w-full h-auto justify-start items-start"
               >

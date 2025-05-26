@@ -15,6 +15,19 @@ from vertexai.language_models import TextEmbeddingModel
 from google import genai
 from google.genai import types
 
+
+_table_users = 'vendo_users'
+_table_organizations = 'vendo_organizations'
+_table_ai_memory = 'vendo_ai_memory'
+
+class FirebaseClient:
+    def __init__(self, firebase_db_url):
+        self._client = firestore.client(firebase_admin.initialize_app(options={
+            'databaseURL': firebase_db_url
+        }))
+
+
+
 class FirestoreSessionService(BaseSessionService):
     def __init__(self, collection_name="vendo_ai_memory"):
         super().__init__()
@@ -132,11 +145,97 @@ class FirestoreSessionService(BaseSessionService):
                     "content": msg["content"],
                     "embedding": msg["embedding"]
                 })
-
+        
         return result
     
+    def get_all_requirements(self, user_id: str, message_type: str = "requirements"):
+        doc = self.collection.document(user_id).get()
+        if not doc.exists:
+            return []
 
+        messages = doc.to_dict().get(message_type, [])
+        result = []
+
+        for msg in messages:
+            if "embedding" in msg and "content" in msg:
+                result.append(msg["content"])
+        
+        return result
+
+    def get_history(self, user_id):
+        result = self._client.collection(_table_ai_memory).document(user_id).get('requirements')
+        if result.exists:
+            return result.to_dict()
+        return None
     
+    def update_requirement_by_index(self, user_id: str, index: int, new_content: str, message_type: str = "requirements"):
+        """Update a specific requirement by index"""
+        doc_ref = self.collection.document(user_id)
+        doc = doc_ref.get()
+        
+        if not doc.exists:
+            return False
+            
+        data = doc.to_dict()
+        requirements = data.get(message_type, [])
+        
+        # Check if index is valid
+        if index < 0 or index >= len(requirements):
+            return False
+        
+        # Update the requirement at the specified index
+        requirements[index]["content"] = new_content
+        requirements[index]["timestamp"] = datetime.datetime.utcnow()
+        
+        # Update embedding for new content
+        if "embedding" in requirements[index]:
+            embedding = embed_text(new_content)
+            requirements[index]["embedding"] = embedding.tolist() if hasattr(embedding, 'tolist') else list(embedding)
+        
+        doc_ref.update({message_type: requirements})
+        return True
+    
+    def delete_requirement_by_index(self, user_id: str, index: int, message_type: str = "requirements"):
+        """Delete a specific requirement by index"""
+        doc_ref = self.collection.document(user_id)
+        doc = doc_ref.get()
+        
+        if not doc.exists:
+            return False
+            
+        data = doc.to_dict()
+        requirements = data.get(message_type, [])
+        
+        # Check if index is valid
+        if index < 0 or index >= len(requirements):
+            return False
+        
+        # Remove the requirement at the specified index
+        requirements.pop(index)
+        
+        doc_ref.update({message_type: requirements})
+        return True
+
+    def get_user_mixpanel_dataset_id(self, user_id: str):
+        """Get the mixpanel_dataset_id from the user object"""
+        try:
+            user_doc = self.collection.document(user_id).get()
+            if user_doc.exists:
+                user_data = user_doc.to_dict()
+                dataset_id = user_data.get("dataset_id")
+                if dataset_id:
+                    print(f"[DEBUG] User {user_id} mixpanel_dataset_id: {dataset_id}", flush=True)
+                    return dataset_id
+                else:
+                    print(f"[DEBUG] No dataset_id found for user {user_id}", flush=True)
+                    return None
+            else:
+                print(f"[DEBUG] User {user_id} not found in {_table_ai_memory}", flush=True)
+                return None
+        except Exception as e:
+            print(f"[ERROR] Failed to get mixpanel_dataset_id for user {user_id}: {str(e)}", flush=True)
+            return None
+
 def embed_text(content: str) -> List[float]:
     client = genai.Client()
 

@@ -241,115 +241,17 @@ def get_top_k_context(user_query: str, user_id: str, k=3, min_similarity=0.0):
 async def agent_to_client_messaging(websocket, live_events, user_id):
     try:
         buffer = ""  # Buffer to accumulate assistant's response
-        response_count = 0  # Track number of responses
-        last_response_time = None  # Track time of last response
-        
-            
-            # # If live_events is a list, handle single event
-            # if isinstance(live_events, list):
-            #     event = live_events[0]
-            #     try:
-            #         print(f"[DEBUG] LIST EVENT: {event}", flush=True)
-            #         part: Part = event.content.parts[0] if event.content and event.content.parts else None
-            #         if not part:
-            #             return
-
-            #         if part.inline_data and part.inline_data.mime_type.startswith("audio/pcm"):
-            #             audio_data = part.inline_data.data
-            #             if audio_data:
-            #                 await websocket.send_text(json.dumps({
-            #                     "mime_type": "audio/pcm",
-            #                     "data": base64.b64encode(audio_data).decode("ascii")
-            #                 }))
-            #                 return
-
-            #         if part.text:
-            #             if part.text not in buffer:
-            #                 buffer += part.text
-
-            #             if buffer:
-            #                 span.set_attribute("message_content", buffer)
-            #                 span.add_event(
-            #                     name="output",
-            #                     attributes={"content": buffer}
-            #                 )
-            #                 session_service.append_message(str(user_id), "assistant", buffer, message_type="messages", include_embedding=False)
-            #                 await websocket.send_text(json.dumps({
-            #                     "mime_type": "text/plain",
-            #                     "data": buffer,
-            #                     "is_speech": True,
-            #                     "turn_complete": True,
-            #                     "interrupted": False
-            #                 }))
-            #                 buffer = ""
-
-            #     except Exception as e:
-            #         span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
-            #         logger.error(f"Processing single event: {str(e)}")
-            #         await websocket.send_text(json.dumps({
-            #             "mime_type": "text/plain",
-            #             "data": f"Error: {str(e)}",
-            #             "error": True
-            #         }))
-            #     return
-
-            # Handle async iterator for live events
-        buffer = ""
-        response_count = 0
-        final_message_seen = False
-        turn_complete_flag = True
 
         async for event in live_events:
             try:
                 print(f"[DEBUG] LIVE EVENT: {event}", flush=True)
 
-                # 🔍 Detect turn completion
-                if getattr(event, "turn_complete", False):
-                    print("[DEBUG] Turn complete detected")
-                    turn_complete_flag = True
-
-                    if final_message_seen and buffer:
-                        # 🧠 Prepare tracing context
-                        parent_span_context = active_contexts.get(user_id)
-                        from opentelemetry.trace import NonRecordingSpan, set_span_in_context, INVALID_SPAN_CONTEXT
-                        if parent_span_context:
-                            parent_span = NonRecordingSpan(parent_span_context)
-                            new_ctx = set_span_in_context(parent_span)
-                        else:
-                            new_ctx = set_span_in_context(NonRecordingSpan(INVALID_SPAN_CONTEXT))
-
-                        # 📤 Send final message + span
-                        with tracer.start_as_current_span("completion", context=new_ctx) as span:
-                            cleaned_buffer = buffer.strip()
-                            span.set_attribute("output", cleaned_buffer)
-                            span.set_attribute("user_id", user_id)
-                            span.set_attribute("message_type", "assistant")
-                            output_token_count = len(cleaned_buffer) // 4
-                            span.set_attribute("gen_ai.usage.completion_tokens", output_token_count)
-                            span.set_attribute("gen_ai.usage.total_tokens", output_token_count)
-                            span.set_attribute("gen_ai.response.model", "gemini-2.0-flash-live-001")
-
-                            session_service.append_message(str(user_id), "assistant", buffer, message_type="messages", include_embedding=False)
-
-                            await websocket.send_text(json.dumps({
-                                "mime_type": "text/plain",
-                                "data": buffer,
-                                "is_speech": True,
-                                "turn_complete": True,
-                                "interrupted": False
-                            }))
-                        
-                        # 🔄 Reset state
-                        buffer = ""
-                        final_message_seen = False
-                        turn_complete_flag = False
-                    continue
-
-                # 🧩 Process text parts
+                # Process text parts
                 part = event.content.parts[0] if event.content and event.content.parts else None
                 if not part:
                     continue
 
+                # Handle audio data
                 if part.inline_data and part.inline_data.mime_type.startswith("audio/pcm"):
                     audio_data = part.inline_data.data
                     if audio_data:
@@ -359,13 +261,48 @@ async def agent_to_client_messaging(websocket, live_events, user_id):
                         }))
                     continue
 
+                # Accumulate text
                 if part.text and part.text not in buffer:
                     buffer += part.text
 
-                is_final = getattr(event, 'is_final_response', lambda: False)()
-                is_final_manual = is_final_answer(event)
-                if is_final and is_final_manual:
-                    final_message_seen = True
+                # Send when final response is received
+                if event.is_final_response():
+                    print("🎉 Final text part received")
+                    
+                    # Prepare tracing context
+                    parent_span_context = active_contexts.get(user_id)
+                    from opentelemetry.trace import NonRecordingSpan, set_span_in_context, INVALID_SPAN_CONTEXT
+                    if parent_span_context:
+                        parent_span = NonRecordingSpan(parent_span_context)
+                        new_ctx = set_span_in_context(parent_span)
+                    else:
+                        new_ctx = set_span_in_context(NonRecordingSpan(INVALID_SPAN_CONTEXT))
+
+                    # Send final message with OpenTelemetry span
+                    with tracer.start_as_current_span("completion", context=new_ctx) as span:
+                        cleaned_buffer = buffer.strip()
+                        span.set_attribute("output", cleaned_buffer)
+                        span.set_attribute("user_id", user_id)
+                        span.set_attribute("message_type", "assistant")
+                        output_token_count = len(cleaned_buffer) // 4
+                        span.set_attribute("gen_ai.usage.completion_tokens", output_token_count)
+                        span.set_attribute("gen_ai.usage.total_tokens", output_token_count)
+                        span.set_attribute("gen_ai.response.model", "gemini-2.0-flash-live-001")
+
+                        # Store in session service
+                        session_service.append_message(str(user_id), "assistant", buffer, message_type="messages", include_embedding=False)
+
+                        # Send to client
+                        await websocket.send_text(json.dumps({
+                            "mime_type": "text/plain",
+                            "data": buffer,
+                            "is_speech": True,
+                            "turn_complete": True,
+                            "interrupted": False
+                        }))
+                    
+                    # Reset buffer
+                    buffer = ""
 
             except Exception as e:
                 logger.error(f"Processing stream event: {str(e)}")
@@ -389,32 +326,32 @@ async def client_to_agent_messaging(websocket, user_id, live_request_queue):
         while True:
             
             
-                message = await websocket.receive_text()
-                data = json.loads(message)
-                content = data.get("data", "")
-                
-                if data.get("mime_type") == "text/plain":
-                    with tracer.start_as_current_span("user_message") as span:
-                        span_context = span.get_span_context()  # ✅ This is correct
-                        active_contexts[user_id] = span_context 
-                        span.set_attribute("user_id", user_id)
-                        span.set_attribute("message_type", "user")
-                        # Set both attribute and event data
-                        span.set_attribute("message_content", content)
-                        span.set_attribute("input", content)
-                        input_token_count = len(content) // 4
-                        # Use proper OpenTelemetry Gen AI conventions
-                        span.set_attribute("gen_ai.usage.prompt_tokens", int(input_token_count))
-                        span.set_attribute("gen_ai.usage.total_tokens", int(input_token_count))
-                        span.set_attribute("gen_ai.request.model", "gemini-2.0-flash-live-001")
-                        
-                        session_service.append_message(str(user_id), "user", content, message_type="messages", include_embedding=False)
-                        context = get_context(content, user_id)
-                        full_input = "\n\n".join(context + [content])
-                        live_request_queue.send_content(Content(role="user", parts=[Part.from_text(text=full_input)]))
-                elif data.get("mime_type") == "audio/state":
-                    span.set_attribute("audio_state", data.get('is_recording', False))
-                    logger.debug(f"Audio state change: is_recording={data.get('is_recording', False)}")
+            message = await websocket.receive_text()
+            data = json.loads(message)
+            content = data.get("data", "")
+            
+            if data.get("mime_type") == "text/plain":
+                with tracer.start_as_current_span("user_message") as span:
+                    span_context = span.get_span_context()  # ✅ This is correct
+                    active_contexts[user_id] = span_context 
+                    span.set_attribute("user_id", user_id)
+                    span.set_attribute("message_type", "user")
+                    # Set both attribute and event data
+                    span.set_attribute("message_content", content)
+                    span.set_attribute("input", content)
+                    input_token_count = len(content) // 4
+                    # Use proper OpenTelemetry Gen AI conventions
+                    span.set_attribute("gen_ai.usage.prompt_tokens", int(input_token_count))
+                    span.set_attribute("gen_ai.usage.total_tokens", int(input_token_count))
+                    span.set_attribute("gen_ai.request.model", "gemini-2.0-flash-live-001")
+                    
+                    session_service.append_message(str(user_id), "user", content, message_type="messages", include_embedding=False)
+                    context = get_context(content, user_id)
+                    full_input = "\n\n".join(context + [content])
+                    live_request_queue.send_content(Content(role="user", parts=[Part.from_text(text=full_input)]))
+            elif data.get("mime_type") == "audio/state":
+                span.set_attribute("audio_state", data.get('is_recording', False))
+                logger.debug(f"Audio state change: is_recording={data.get('is_recording', False)}")
                         
     except WebSocketDisconnect:
         logger.debug("WebSocket disconnected")
@@ -491,34 +428,93 @@ async def get_chat_history(user_id: str = Query(...)):
         print(f"[ERROR] Failed to get chat history: {str(e)}", flush=True)
         return {"error": str(e)}, 500
 
-@app.post("/slack/command")
-async def slack_command(request: Request):
-    form = await request.form()
-    user_text = form.get("text")
-    print(f"[DEBUG] Slack command received: {user_text}", flush=True)
-    user_id = form.get("user_id", "slack-user")  # fallback ID
-    session_id = f"slack-session-{user_id}"
+@app.get("/api/context/requirements")
+async def get_all_requirements(user_id: str = Query(...)):
+    try:
+        print(f"[DEBUG] Getting all requirements for user: {user_id}", flush=True)
+        
+        # Get the user's mixpanel_dataset_id and print it
+        mixpanel_dataset_id = session_service.get_user_mixpanel_dataset_id(str(user_id))
+        if mixpanel_dataset_id:
+            print(f"[INFO] User {user_id} Mixpanel Dataset ID: {mixpanel_dataset_id}", flush=True)
+        
+        # Get requirements/knowledge content for the user
+        messages = session_service.get_all_requirements(str(user_id), message_type="requirements")
+        return messages or []
+    except Exception as e:
+        print(f"[ERROR] Failed to get knowledge content: {str(e)}", flush=True)
+        return {"error": str(e)}, 500
 
-    # 🌟 Prepare session
-    live_events, request_queue = start_agent_session(session_id=session_id, user_id=user_id)
+@app.post("/api/context/add")
+async def add_knowledge_requirement(request: dict):
+    try:
+        user_id = request.get("user_id")
+        content = request.get("content")
+        message_type = request.get("message_type", "requirements")
+        
+        if not user_id or not content:
+            return {"error": "user_id and content are required"}, 400
+            
+        session_service.append_message(
+            str(user_id), 
+            "user", 
+            content, 
+            message_type=message_type, 
+            include_embedding=True
+        )
+        return {"success": True, "message": "Content added successfully"}
+    except Exception as e:
+        print(f"[ERROR] Failed to add knowledge content: {str(e)}", flush=True)
+        return {"error": str(e)}, 500
 
-    # 🧠 Get context and send message
-    context = get_context(user_text, user_id)
-    full_input = "\n\n".join(context + [user_text])
-    request_queue.send_content(Content(role="user", parts=[Part.from_text(text=full_input)]))
+@app.put("/api/context/update")
+async def update_knowledge_requirement(request: dict):
+    try:
+        user_id = request.get("user_id")
+        index = request.get("index")
+        new_content = request.get("new_content")
+        message_type = request.get("message_type", "requirements")
+        
+        if not user_id or index is None or not new_content:
+            return {"error": "user_id, index, and new_content are required"}, 400
+            
+        success = session_service.update_requirement_by_index(
+            str(user_id), 
+            int(index), 
+            new_content, 
+            message_type=message_type
+        )
+        
+        if success:
+            return {"success": True, "message": "Content updated successfully"}
+        else:
+            return {"error": "Invalid index or update failed"}, 404
+            
+    except Exception as e:
+        print(f"[ERROR] Failed to update knowledge content: {str(e)}", flush=True)
+        return {"error": str(e)}, 500
 
-    # 🔁 Wait for response
-    response_text = ""
-    
-    async for event in live_events:
-        part = event.content.parts[0] if event.content and event.content.parts else None
-        if part and part.text:
-            response_text += part.text
-            print(f"[DEBUG] Response text: {response_text}", flush=True)
-
-        is_final = getattr(event, "is_final_response", lambda: False)()
-        is_final_manual = is_final_answer(event)
-        if is_final and is_final_manual:
-            break  # Done after final message
-        print(f"[DEBUG] Response text: {response_text}", flush=True)
-    return PlainTextResponse(response_text or "No response from agent.")
+@app.delete("/api/context/delete")
+async def delete_knowledge_requirement(request: dict):
+    try:
+        user_id = request.get("user_id")
+        index = request.get("index")
+        message_type = request.get("message_type", "requirements")
+        
+        if not user_id or index is None:
+            return {"error": "user_id and index are required"}, 400
+            
+        success = session_service.delete_requirement_by_index(
+            str(user_id), 
+            int(index), 
+            message_type=message_type
+        )
+        
+        if success:
+            return {"success": True, "message": "Content deleted successfully"}
+        else:
+            return {"error": "Invalid index or delete failed"}, 404
+            
+    except Exception as e:
+        print(f"[ERROR] Failed to delete knowledge content: {str(e)}", flush=True)
+        return {"error": str(e)}, 500

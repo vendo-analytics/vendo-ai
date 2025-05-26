@@ -41,7 +41,7 @@ from fastapi import WebSocketDisconnect
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 
-from .agents.agents import root_agent, root_agent_x
+from .agents.agents import root_agent
 from opentelemetry import trace
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider

@@ -1,95 +1,69 @@
-import datetime
+import os
+from datetime import date
+import json
+import requests
+import gzip
+import io
+from typing import Union, List, Optional, Iterable
+
+import google.genai.types as types
 from zoneinfo import ZoneInfo
 from google.adk.agents import Agent
 from google.adk.tools.agent_tool import AgentTool
-from google.adk.tools import google_search  # Import the tool
-from typing import Union, List, Optional, Iterable
-import os
-import json
-import gzip
-
-import io
-
-# ────────────────────────────────────────────────────────────────────────────
-# 1. Tools
-# ────────────────────────────────────────────────────────────────────────────
-# moved Mixpanel tool to its own file
-from .tools.bigquery_tools import query_bigquery
-from .tools.chart_tools import build_chart  # Import the chart tool
+from google.adk.tools import google_search, FunctionTool  # Import the tool
+from google.adk.agents.callback_context import CallbackContext # Or ToolContext
+from google.adk.tools import load_artifacts
 
 
-#moved prompts to a separate file
-from .prompts import (
- 
-    ROOT_AGENT_INSTRUCTION,
-    GOOGLE_SEARCH_AGENT_INSTRUCTION,
-    BIGQUERY_QUERY_RUNNER_AGENT_INSTRUCTION,
-    GET_BIGQUERY_QUERY_AGENT_INSTRUCTION,
-    ROOT_AGENT_INSTRUCTION_X,
+date_today = date.today()
+
+from dotenv import load_dotenv
+load_dotenv()
+
+# Import client information
+from .business_context.client_info import get_client_info
+
+from .prompt import (
+    ROOT_AGENT_INSTRUCTION
 )
 
-
-bigquery_query_runner_agent = Agent(
-    name="bigquery_query_runner_agent",
-    model="gemini-2.0-flash",
-    description="Builds & executes the BigQuery query, returns raw rows.",
-    instruction=BIGQUERY_QUERY_RUNNER_AGENT_INSTRUCTION,
-    tools=[query_bigquery],
-    output_key="bigquery_data"
-)
+from .sub_agents.data_planner.agent import data_planner
+from .sub_agents.query.agent import query_agent
 
 
+def setup_before_agent_call(callback_context: CallbackContext):
+    """Setup the agent with client information."""
+    
+    # Load client information into session state 
+    if "client_info" not in callback_context.state:
+        client_info = get_client_info()
+        callback_context.state["client_info"] = client_info
+    
+    # TODO: Loading Database Schema into Agent Instructions
 
-get_bigquery_query_agent = Agent(
-    name="get_bigquery_query_agent",
-    model="gemini-2.0-flash",
-    description="Returns the BigQuery SQL query to use with bigquery_query_runner_agent which queries the table.",
-    instruction=GET_BIGQUERY_QUERY_AGENT_INSTRUCTION,
-    tools=[AgentTool(agent=bigquery_query_runner_agent)],
-    output_key="bigquery_query"
-)
-
-
-# google search agent
-google_search_agent = Agent(
-    model='gemini-2.0-flash-exp',
-    name='google_search_agent',
-    instruction=GOOGLE_SEARCH_AGENT_INSTRUCTION,
-    tools=[google_search]
-)
 
 # ────────────────────────────────────────────────────────────────────────────
-# 3. Root orchestration agent
+# Root orchestration agent
 # ────────────────────────────────────────────────────────────────────────────
-
-
-import asyncio
-from typing import AsyncGenerator
-
-from google.adk.agents import LiveRequestQueue
-from google.adk.agents.llm_agent import Agent
-from google.adk.tools.function_tool import FunctionTool
-from google.genai import Client
-from google.genai import types as genai_types
-
-
 root_agent = Agent(
     name="agent_router",
-    model="gemini-2.0-flash-live-001",
-    description="Job is to route the user's request to the right sub-agent and handle data visualization requests.",
+    model=os.getenv("MODEL_GEMINI"),
+    description="Job is to route the user's request to the right sub-agent.",
     instruction=ROOT_AGENT_INSTRUCTION,
+    global_instruction=(
+        f"""
+        You are a Data Science and Data Analytics Multi Agent System.
+        Today's date: {date_today}
+        """
+    ),
+    sub_agents=[
+        query_agent,
+        data_planner
+    ],
     tools=[
-        google_search,
-        query_bigquery,
-        build_chart
-    ]
+        AgentTool(agent=google_search),
+        #load_artifacts, 
+    ],
+    before_agent_callback=setup_before_agent_call, #Add client context, schemas
+    generate_content_config=types.GenerateContentConfig(temperature=0.01),
 )
-
-root_agent_x = Agent(
-    name="factual_search_agent",
-    model="gemini-2.0-flash-live-001",
-    description="Answers factual questions using the google_search tool.",
-    instruction=ROOT_AGENT_INSTRUCTION_X,
-    tools=[google_search],  # Only this tool is allowed
-)
-

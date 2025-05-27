@@ -115,12 +115,7 @@ export function Chat() {
 
   const [messagesContainerRef, messagesEndRef] = useScrollToBottom<HTMLDivElement>()
 
-  // Ensure scroll to bottom when messages change
-  useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" })
-    }
-  }, [messages, isLoading])
+  // The useScrollToBottom hook handles all scrolling automatically via MutationObserver
 
   return (
     <div className="flex flex-col h-full bg-background relative">
@@ -174,7 +169,7 @@ export function Chat() {
       {/* Messages Container */}
       <div
         ref={messagesContainerRef}
-        className="flex flex-col min-w-0 gap-6 flex-1 overflow-y-auto scrollbar-hide pt-4 px-4 pb-32"
+        className="flex flex-col min-w-0 gap-6 flex-1 overflow-y-auto scrollbar-hide pt-4 px-4 pb-4"
       >
         {messages.length === 0 && <Overview />}
 
@@ -189,7 +184,11 @@ export function Chat() {
 
         {isLoading && messages.length > 0 && messages[messages.length - 1].role === "user" && <ThinkingMessage />}
 
-        <div ref={messagesEndRef} className="shrink-0 min-w-[24px] min-h-[24px]" />
+        {/* Spacer to account for fixed input */}
+        <div className="h-32" />
+        
+        {/* Scroll target - positioned at the very bottom */}
+        <div ref={messagesEndRef} className="shrink-0 w-full h-1" />
       </div>
 
       {/* Fixed Input Container at Bottom */}

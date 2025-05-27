@@ -7,6 +7,8 @@ from .prompt import (
     QUERY_INSTRUCTION
 )
 from .tools import query_bigquery, build_chart
+from google.genai.types import GenerateContentConfig
+import google.genai.types as types 
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -16,6 +18,7 @@ query_agent = Agent(
     model=os.getenv("MODEL_GEMINI"),
     description="Plans and conducts data extraction from BigQuery",
     instruction=QUERY_INSTRUCTION,
-    tools=[query_bigquery, build_chart]
+    tools=[query_bigquery, build_chart],
+    generate_content_config=types.GenerateContentConfig(temperature=0.01)
 )
 

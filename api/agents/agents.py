@@ -36,7 +36,13 @@ def setup_before_agent_call(callback_context: CallbackContext):
     
     # Load client information into session state 
     if "client_info" not in callback_context.state:
-        client_info = get_client_info()
+    #if 1==1:
+        # Get user_id from session
+        user_id = getattr(callback_context.session, 'user_id', '001')
+        print(f"[DEBUG] Setting up agent for user_id: {user_id}", flush=True)
+        
+        # Get client info from Firebase with fallback
+        client_info = get_client_info(user_id)
         callback_context.state["client_info"] = client_info
     
     # TODO: Loading Database Schema into Agent Instructions
@@ -65,5 +71,5 @@ root_agent = Agent(
         #load_artifacts, 
     ],
     before_agent_callback=setup_before_agent_call, #Add client context, schemas
-    generate_content_config=types.GenerateContentConfig(temperature=0.01),
+    #generate_content_config=types.GenerateContentConfig(temperature=0.01),
 )

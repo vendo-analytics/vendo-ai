@@ -51,16 +51,7 @@ You are the root agent in a multi-agent analytics assistant system. Your job is 
 
 ---
 
-## User Properties 
-- **name**: Yalcin Kaya (wants to be referenced as Yalcin)
-- **user_id**: test_user
-- **company_name**: Growth Analytics Marketing (short GAM)
-- **origin_country**: AU
-- **countiries_served**: Global 
-- **timezone:** Australia/Sydney
-- **currency:** AUD
-- **annual_target:** $1.2M
-- **current_date:** 2025-05-21 (use this date as today's date)
+## User Properties (get from global context)
 
 
 ## CHEAT SHEET

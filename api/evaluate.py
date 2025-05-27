@@ -22,7 +22,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai.types import Content, Part
 
-from agents.agents import root_agent_x
+from api.agents.agent import root_agent
 
 # --- Setup ---
 load_dotenv()
@@ -75,7 +75,7 @@ def execute_code_string(code_str: str) -> str:
 async def run_agent(question: str, user_id: str) -> (str, str):
     session_id = f"eval_{int(time.time())}"
     session = session_service.create_session(app_name=APP_NAME, user_id=user_id, session_id=session_id)
-    runner = Runner(app_name=APP_NAME, agent=root_agent_x, session_service=session_service)
+    runner = Runner(app_name=APP_NAME, agent=root_agent, session_service=session_service)
     request_queue = LiveRequestQueue()
 
     run_config = RunConfig(response_modalities=["text"])         # ✅ this tells Gemini it can call tools)

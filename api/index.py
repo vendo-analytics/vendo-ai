@@ -41,7 +41,7 @@ from fastapi import WebSocketDisconnect
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 
-from .agents.agents import root_agent
+from .agents.agent import root_agent
 from opentelemetry import trace
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
@@ -176,7 +176,7 @@ def start_agent_session(session_id, user_id):
     )
     runner = Runner(
         app_name=APP_NAME,
-        agent=root_agent_x,
+        agent=root_agent,
         session_service=session_service
     )
     run_config = RunConfig(response_modalities=["text"])

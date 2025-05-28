@@ -157,7 +157,7 @@ class FirestoreSessionService(BaseSessionService):
         result = []
 
         for msg in messages:
-            if "embedding" in msg and "content" in msg:
+            if "content" in msg:
                 result.append(msg["content"])
         
         return result
@@ -234,6 +234,42 @@ class FirestoreSessionService(BaseSessionService):
                 return None
         except Exception as e:
             print(f"[ERROR] Failed to get mixpanel_dataset_id for user {user_id}: {str(e)}", flush=True)
+            return None
+    
+
+    def get_client_info_from_firebase(self, user_id: str = "001"):
+        """
+        Get client information from Firebase business_context object.
+        
+        Args:
+            user_id (str): The user ID to fetch business context for
+            
+        Returns:
+            Optional[Dict[str, Any]]: Client information from Firebase or None if not found
+        """
+        try:
+            
+            
+            # Get user document
+            user_doc = self.collection.document(user_id).get()
+            
+            if user_doc.exists:
+                user_data = user_doc.to_dict()
+                business_context = user_data.get("business_context")
+                print(f"[DEBUG] Business context: {business_context}", flush=True)
+                
+                if business_context and isinstance(business_context, dict):
+                    print(f"[DEBUG] Successfully loaded business_context for user {user_id}", flush=True)
+                    return business_context
+                else:
+                    print(f"[DEBUG] No business_context found for user {user_id}", flush=True)
+                    return None
+            else:
+                print(f"[DEBUG] User {user_id} not found in Firebase", flush=True)
+                return None
+                
+        except Exception as e:
+            print(f"[ERROR] Failed to get business_context from Firebase for user {user_id}: {str(e)}", flush=True)
             return None
 
 def embed_text(content: str) -> List[float]:

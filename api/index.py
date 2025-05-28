@@ -123,6 +123,13 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, user_id: str
                 content_obj = Content(role="user", parts=[Part.from_text(text=full_input)])
 
                 result = runner.run_async(session_id=str(session_id), user_id=user_id, new_message=content_obj)
+                
+                span.set_attribute("input", full_input)
+                span.set_attribute("user_id", user_id)
+                span.set_attribute("message_type", "user")
+                input_token_count = len(full_input) // 4
+                span.set_attribute("gen_ai.usage.prompt_tokens", input_token_count)
+                span.set_attribute("gen_ai.response.model", "gemini-2.0-flash")
 
                 result_text = ""
                 async for event in result:
@@ -143,6 +150,13 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, user_id: str
                     if event.is_final_response():
                         if event.content and event.content.parts:
                             result_text = event.content.parts[0].text
+                            span.set_attribute("output", result_text)
+                            span.set_attribute("user_id", user_id)
+                            span.set_attribute("message_type", "assistant")
+                            output_token_count = len(result_text) // 4
+                            span.set_attribute("gen_ai.usage.completion_tokens", output_token_count)
+                            span.set_attribute("gen_ai.usage.total_tokens", output_token_count)
+                            span.set_attribute("gen_ai.response.model", "gemini-2.0-flash")
                         break
 
                 #session_service.append_message(str(user_id), "assistant", result_text)
@@ -258,4 +272,52 @@ async def delete_knowledge_requirement(request: dict):
 
     except Exception as e:
         logger.error(f"[DELETE /context/delete] {e}")
+        return {"error": str(e)}, 500
+
+
+@app.get("/api/context/business")
+async def get_business_context(user_id: str = Query(...)):
+    try:
+        
+        business_context = firestore_session_service.get_client_info_from_firebase(str(user_id))
+        if business_context:
+            return business_context
+        else:
+            return {"error": "Business context not found"}, 404
+    except Exception as e:
+        logger.error(f"[GET /context/business] {e}")
+        return {"error": str(e)}, 500
+
+
+@app.put("/api/context/business")
+async def update_business_context(request: dict):
+    try:
+        user_id = request.get("user_id")
+        business_context = request.get("business_context")
+
+        if not user_id or not business_context:
+            return {"error": "user_id and business_context are required"}, 400
+
+        # Update business context in Firebase
+        firestore_session_service.collection.document(str(user_id)).set({
+            "business_context": business_context
+        }, merge=True)
+        
+        # Clear cached client_info from active sessions to force reload
+        # This ensures the agent picks up the new business context on next call
+        for session_id, context in active_contexts.items():
+            if hasattr(context, 'state') and 'client_info' in context.state:
+                del context.state['client_info']
+                print(f"[DEBUG] Cleared cached client_info for session {session_id}")
+        
+        # Also set refresh flag for any active callback contexts
+        # This works with the modified setup_before_agent_call function
+        for session_id, context in active_contexts.items():
+            if hasattr(context, 'state'):
+                context.state['refresh_client_info'] = True
+                print(f"[DEBUG] Set refresh flag for session {session_id}")
+        
+        return {"success": True, "message": "Business context updated successfully"}
+    except Exception as e:
+        logger.error(f"[PUT /context/business] {e}")
         return {"error": str(e)}, 500

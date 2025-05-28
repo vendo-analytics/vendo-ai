@@ -22,7 +22,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai.types import Content, Part
 
-from agents.agents import root_agent_x
+from api.agents.agent import root_agent_x
 
 # --- Setup ---
 load_dotenv()

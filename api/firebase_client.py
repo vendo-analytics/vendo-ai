@@ -57,7 +57,7 @@ class FirestoreSessionService(BaseSessionService):
             user_id=user_id
         )
 
-    def get_session(self, session_id: str) -> Optional[Session]:
+    def get_session(self, session_id: str, **kwargs) -> Optional[Session]:
         doc = self.collection.document(session_id).get()
         if doc.exists:
             data = doc.to_dict()

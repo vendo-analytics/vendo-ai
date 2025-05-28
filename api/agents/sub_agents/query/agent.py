@@ -6,7 +6,7 @@ from google.adk.agents import Agent
 from .prompt import (
     QUERY_INSTRUCTION
 )
-from .tools import query_bigquery, build_chart
+from .query_execution.tools import query_bigquery, build_chart
 from google.genai.types import GenerateContentConfig
 import google.genai.types as types 
 from dotenv import load_dotenv

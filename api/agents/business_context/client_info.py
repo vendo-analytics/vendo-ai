@@ -4,6 +4,7 @@ from typing import Dict, Any
 from datetime import date
 from zoneinfo import ZoneInfo
 
+
 # Client information dictionary
 CLIENT_INFO: Dict[str, Any] = {
     "name": "Yalcin Kaya",
@@ -16,7 +17,6 @@ CLIENT_INFO: Dict[str, Any] = {
     "timezone": "Australia/Sydney",
     "currency": "AUD", 
     "annual_target": "$1.2M",
-    "current_date": "2025-05-21"
 }
 
 
@@ -40,11 +40,4 @@ def get_client_timezone() -> ZoneInfo:
     return ZoneInfo(CLIENT_INFO["timezone"])
 
 
-def get_current_date() -> date:
-    """
-    Get the current date as configured for the client.
-    
-    Returns:
-        date: The current date for the client context.
-    """
-    return date.fromisoformat(CLIENT_INFO["current_date"])
+

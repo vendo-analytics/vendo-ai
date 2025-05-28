@@ -16,6 +16,8 @@ scikit-learn==1.6.1
 firebase-admin==6.5.0
 google-cloud-firestore==2.18.0
 google-cloud-texttospeech==2.27.0
+google-cloud-bigquery>=3.25.0
+db-dtypes>=1.4.3
 
 # OpenTelemetry dependencies for observability
 opentelemetry-api>=1.33.0

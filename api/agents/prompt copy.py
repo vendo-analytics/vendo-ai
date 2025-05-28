@@ -140,7 +140,7 @@ BIGQUERY_SCHEMA = '''
 }
 '''
 
-GET_BIGQUERY_QUERY_AGENT_INSTRUCTION = '''
+GET_BIGQUERY_data_retrieval_INSTRUCTION = '''
    You are a SQL query generator.
    You are querying a table called event_data that contains marketing event tracking data. The dataset and table you will be querying is called 'gam-dwh.mixpanel_data_3324357.mixpanel_all_data_export_*`.
    Once you get the query from the user, use the bigquery_query_runner_agent to run the querys

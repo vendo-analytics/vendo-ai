@@ -1,6 +1,7 @@
 from typing import Dict, List, Optional, TypedDict, Any
 from datetime import datetime
 import pandas as pd
+import os
 from langgraph.graph import Graph, StateGraph
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import interrupt, Command
@@ -14,8 +15,14 @@ import json
 def query_bigquery(query: str):
     """Execute a BigQuery SQL query and return formatted results."""
     print("▶️ Executing BigQuery...")
+    
+    # Get the path to the service key file in the project root
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.join(current_dir, '..', '..', '..', '..')
+    service_key_path = os.path.join(project_root, 'service_key.json')
+    
     credentials = service_account.Credentials.from_service_account_file(
-            'service_key.json',
+            service_key_path,
             scopes=['https://www.googleapis.com/auth/cloud-platform']
         )
     try:

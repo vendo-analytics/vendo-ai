@@ -20,7 +20,7 @@ CLIENT_INFO: Dict[str, Any] = {
 }
 
 
-def get_client_info() -> Dict[str, Any]:
+def get_info() -> Dict[str, Any]:
     """
     Get the client information dictionary.
     
@@ -28,16 +28,3 @@ def get_client_info() -> Dict[str, Any]:
         Dict[str, Any]: Client information including name, company, timezone, etc.
     """
     return CLIENT_INFO.copy()
-
-
-def get_client_timezone() -> ZoneInfo:
-    """
-    Get the client's timezone as a ZoneInfo object.
-    
-    Returns:
-        ZoneInfo: The client's timezone.
-    """
-    return ZoneInfo(CLIENT_INFO["timezone"])
-
-
-

@@ -23,18 +23,49 @@ from .sub_agents.analyst.agent import analyst_agent
 from dotenv import load_dotenv
 load_dotenv()
 
-date_today = date.today()
-
 # Import client information
-from .business_context.client_info import get_client_info
+from .business_data.business_info import get_info
+from .business_data.schemas import (
+    get_user_table_schema,
+    get_event_table_schema,
+    get_event_names,
+    get_ad_data_properties,
+    get_order_received_properties,
+    get_products_object_schema,
+    get_product_events,
+    format_user_table_schema_for_prompt,
+    format_event_table_schema_for_prompt,
+    format_event_names_for_prompt,
+    format_all_schemas_for_prompt
+)
+
+date_today = date.today()
+business_context = get_info()
 
 def setup_before_agent_call(callback_context: CallbackContext):
     """Setup the agent with client information."""
-    
+
     # Load client information into session state 
-    if "client_info" not in callback_context.state:
-        client_info = get_client_info()
-        callback_context.state["client_info"] = client_info
+    if "business_context" not in callback_context.state:
+        callback_context.state["business_context"] = business_context
+    
+    user_table = "gam-dwh.piri_red.engage"
+    event_table = "gam-dwh.piri_red.export"
+
+    callback_context.state["user_table"] = user_table
+    callback_context.state["event_table"] = event_table
+    
+    # Add individual schema components to the state
+    callback_context.state["user_table_schema"] = get_user_table_schema()
+    callback_context.state["event_table_schema"] = get_event_table_schema()
+    callback_context.state["event_names"] = get_event_names()
+    callback_context.state["ad_data_properties"] = get_ad_data_properties()
+    callback_context.state["order_received_properties"] = get_order_received_properties()
+    callback_context.state["products_object_schema"] = get_products_object_schema()
+    callback_context.state["product_events"] = get_product_events()
+    
+    # Add formatted schemas to the state
+    callback_context.state["schemas"] = format_all_schemas_for_prompt(user_table, event_table)
 
 
 # google search agent
@@ -45,7 +76,6 @@ google_search_agent = Agent(
     instruction=GOOGLE_SEARCH_INSTRUCTION,
     tools=[google_search]
 )
-
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -65,7 +95,7 @@ root_agent = Agent(
     sub_agents=[
         data_retrieval,
         data_planner,
-        #analyst_agent
+        analyst_agent
     ],
     tools=[
         AgentTool(agent=google_search_agent),

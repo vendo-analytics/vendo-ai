@@ -8,17 +8,6 @@ from .tools import (
     build_chart,
 )
 
-
-def setup_before_agent_call(callback_context: CallbackContext):
-    """Setup the agent with client information."""
-    
-    user_table = "gam-dwh.piri_red.engage"
-    event_table = "gam-dwh.piri_red.export"
-
-    callback_context.state["user_table"] = user_table
-    callback_context.state["event_table"] = event_table
-
-
 from google.adk.agents import Agent
 from .prompt import (
     QUERY_INSTRUCTION
@@ -36,6 +25,5 @@ data_retrieval = Agent(
     tools=[
         query_bigquery,
         build_chart,
-    ],
-    before_agent_callback=setup_before_agent_call, #Add client context, schemas
+    ]
 )

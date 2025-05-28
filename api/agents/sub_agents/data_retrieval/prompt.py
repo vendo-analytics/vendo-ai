@@ -61,8 +61,11 @@ Database admin instructions (please *unconditionally* follow these instructions.
 
 16. **Date Functions** 
    - DO NOT USE CURRENT_DATE()Instead print out the current date in format YYYY-MM-DD. 
-   - For Date interval questions here's an example where clause: "DATE(time) BETWEEN DATE_SUB(DATE('2025-05-28'), INTERVAL 12 MONTH) AND DATE('2025-05-28') "
+   - For Date interval questions here's an example where clause: "DATE(time) BETWEEN DATE_SUB(DATE('2025-05-28'), INTERVAL 12 MONTH) AND DATE('2025-05-28') 
+   - Always assume that time may be a TIMESTAMP, and cast it to DATE in any condition using BETWEEN, =, >=, or <=.
 
+17. **Numeric Formatting:**
+   - Always round numeric values (revenue, amounts, averages, percentages, etc.) to two decimal places using `ROUND(value, 2)` for better readability and consistency.
 
 ## Workflow
 1. **Understand the user's request** using the user profile and context.
@@ -73,7 +76,7 @@ Database admin instructions (please *unconditionally* follow these instructions.
 6. **Determine if a join is needed** (e.g., for segmentation or cohorting).
 7. **Generate a concise, valid BigQuery SQL query** that returns only the necessary data. Use CTEs (WITH clauses) for complex queries.
 8. **Return the SQL and a detailed explanation** of what it does, including logic, assumptions, mappings, and caveats.
-9. **Ask the user for confirmation**: "Does the query make sense to you? If yes, let me know and I will run this query"
+9. **Ask the user for confirmation**: "Does the query make sense to you? If yes, let me know and I will run this query."
 10. **If the user confirms**:
    - **Validate the SQL syntax** to ensure it's correct
    - **Execute the query** using the `query_bigquery` function
@@ -237,276 +240,8 @@ Database admin instructions (please *unconditionally* follow these instructions.
 
 - Always explain your mapping choices in the explanation section.
 
-
 ## Schemas
-
-### User Table: `{user_table}`
-
-| Name                              | Mode      | Type      | Description                                                      |
-|-----------------------------------|-----------|-----------|------------------------------------------------------------------|
-| customer_tags                     | REPEATED  | RECORD    | The tags associated with the customer                            |
-| customer_tags.value               | NULLABLE  | STRING    |                                                                  |
-| distinct_id                       | NULLABLE  | STRING    |                                                                  |
-| email_marketing_consent_opt_in_level | NULLABLE | STRING    | Shows the consent opt in level of users                          |
-| email_marketing_consent_state     | NULLABLE  | STRING    | Whether user is subscribed or not to our email marketing         |
-| first_order_date                  | NULLABLE  | TIMESTAMP | The date of the first paid order of the customers                |
-| first_seen                        | NULLABLE  | TIMESTAMP | When the user was first seen. This data is stored in the users browser on their first visit. |
-| gclid                             | NULLABLE  | STRING    |                                                                  |
-| last_order_date                   | NULLABLE  | TIMESTAMP | The date of the last paid order of the customer                  |
-| marketing_state                   | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_city                  | NULLABLE  | STRING    | The City                                                         |
-| mp_reserved_country_code          | NULLABLE  | STRING    | The country of the order                                         |
-| mp_reserved_created               | NULLABLE  | TIMESTAMP |                                                                  |
-| mp_reserved_email                 | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_first_name            | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_initial_utm_campaign  | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_initial_utm_content   | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_initial_utm_medium    | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_initial_utm_source    | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_initial_utm_term      | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_last_name             | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_last_seen             | NULLABLE  | TIMESTAMP |                                                                  |
-| mp_reserved_phone                 | NULLABLE  | STRING    | The phone number                                                 |
-| mp_reserved_region                | NULLABLE  | STRING    | The state (Australia) / region (US)                              |
-| mp_reserved_timezone              | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_user_id               | NULLABLE  | STRING    | The client-side ID of the customer, provided by Shopify          |
-| msclkid                           | NULLABLE  | STRING    |                                                                  |
-| order_count                       | NULLABLE  | NUMERIC   | Number of orders that the customer have placed                   |
-| shopify_customer_id               | NULLABLE  | STRING    | Shopify Customer ID                                              |
-| shopify_customer_notes            | NULLABLE  | STRING    | Admin entered customer notes                                     |
-| state                             | NULLABLE  | STRING    |                                                                  |
-| tax_exempt                        | NULLABLE  | BOOLEAN   | Whether customer is exempt from tax or not                       |
-| total_spent                       | NULLABLE  | STRING    | Total amount spent by customer                                   |
-| utm_campaign                      | NULLABLE  | STRING    |                                                                  |
-| utm_content                       | NULLABLE  | STRING    |                                                                  |
-| utm_medium                        | NULLABLE  | STRING    |                                                                  |
-| utm_source                        | NULLABLE  | STRING    |                                                                  |
-| utm_term                          | NULLABLE  | STRING    |                                                                  |
-| verified_email                    | NULLABLE  | BOOLEAN   | Whether the customers emails verified or not                     |
-| shipping_address                  | REPEATED  | RECORD    | Latest shipping address of the customer                          |
-
-
-### Event Table: `{event_table}`
-
-| Name                              | Mode      | Type      | Description                                                      |
-|-----------------------------------|-----------|-----------|------------------------------------------------------------------|
-| abandoned_checkout_url            | NULLABLE  | STRING    |                                                                  |
-| account_id                        | NULLABLE  | STRING    | Advertising account ID                                           |
-| account_name                      | NULLABLE  | STRING    | Advertising Account name                                         |
-| ad_id                             | NULLABLE  | STRING    | Advertising Ad ID                                                |
-| adgroup_id                        | NULLABLE  | STRING    | Advertising Ad Group ID - only valid for Google Ads              |
-| adgroup_name                      | NULLABLE  | STRING    | Advertising Ad Group Name - only valid for Google Ads            |
-| amount                            | NULLABLE  | STRING    | Used for the monetary amount of the object (Product Added To Cart, Cart Viewed) !!! This is coming as null. |
-| app_id                            | NULLABLE  | STRING    | The Shopify APP ID that the order is placed from.                |
-| billing_address                   | NULLABLE  | STRING    | The billing address where the order will be billed to (Order Received) |
-| campaign_id                       | NULLABLE  | STRING    | Advertising Campaign ID - All ad platforms have this             |
-| campaign_name                     | NULLABLE  | STRING    | Advertising Campaign ID - All ad platforms have this             |
-| cart_subtotal_amount              | NULLABLE  | STRING    | The price at checkout before duties, shipping, and taxes (Order Received, Checkout Completed) |
-| cart_total_amount                 | NULLABLE  | STRING    | The sum of all the items in the checkout, including duties, taxes, and discounts (Order Received, Checkout Completed). USE THIS FOR REVENUE RELATED QUESTIONS |
-| checkout_attributes               | NULLABLE  | STRING    | A list of attributes accumulated throughout the checkout process (Checkout Completed) |
-| checkout_id                       | NULLABLE  | STRING    | The unique checkout ID of the checkout                           |
-| checkout_token                    | NULLABLE  | STRING    | A unique identifier for a particular checkout (Checkout Completed) |
-| collection_id                     | NULLABLE  | STRING    | the product category ID - one product may belong to multiple categories |
-| collection_title                  | NULLABLE  | STRING    | the product category name - one product may belong to multiple categories |
-| confirmed                         | NULLABLE  | STRING    | Status or the orders if it was confirmed or not (Products Purchased) |
-| conversions                       | NULLABLE  | STRING    | The conversions reported from ad platforms                       |
-| cost_reporting                    | NULLABLE  | STRING    | The advertising cost in the reporting currency AUD               |
-| cost_source                       | NULLABLE  | STRING    | The advertising cost in the source currency - variable           |
-| currency                          | NULLABLE  | STRING    | The three-letter code that represents the currency (Order Received, , etc.) |
-| currency_reporting                | NULLABLE  | STRING    |                                                                  |
-| currency_source                   | NULLABLE  | STRING    |                                                                  |
-| custom_order_attributes           | NULLABLE  | STRING    |                                                                  |
-| delivery_date                     | NULLABLE  | STRING    |                                                                  |
-| delivery_speed                    | NULLABLE  | STRING    |                                                                  |
-| delivery_speed_weekdays           | NULLABLE  | STRING    |                                                                  |
-| device_category                   | NULLABLE  | STRING    |                                                                  |
-| discount                          | NULLABLE  | STRING    |                                                                  |
-| email                             | NULLABLE  | STRING    | The email attached to this checkout (Order Received, , Checkout Completed) |
-| event                             | NULLABLE  | STRING    |                                                                  |
-| fbclid                            | NULLABLE  | STRING    |                                                                  |
-| fulfillment_speed                 | NULLABLE  | STRING    |                                                                  |
-| fulfillment_speed_weekdays        | NULLABLE  | STRING    |                                                                  |
-| fulfillment_status                | NULLABLE  | STRING    | The payment state of an order ()               |
-| gclid                             | NULLABLE  | STRING    |                                                                  |
-| job_id                            | NULLABLE  | STRING    |                                                                  |
-| language                          | NULLABLE  | STRING    |                                                                  |
-| landing_page                      | NULLABLE  | STRING    | The first page a user visits when arriving on a website or app () |
-| mp_reserved_ad_clicks             | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_ad_cost               | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_ad_impressions        | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_ad_platform           | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_browser               | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_browser_version       | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_country               | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_country_code          | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_current_url           | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_device                | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_device_id             | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_email                 | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_import                | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_initial_utm_campaign   | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_initial_utm_content    | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_initial_utm_medium     | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_initial_utm_source     | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_initial_utm_term       | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_lib_version            | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_marketing_state         | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_mp_replay_id            | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_mp_replay_retention_period | NULLABLE | STRING   |                                                                  |
-| mp_reserved_os                      | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_phone                   | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_region                  | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_screen_height           | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_screen_width            | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_source                  | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_timezone                | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_user_agent              | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_user_id                 | NULLABLE  | STRING    |                                                                  |
-| mp_reserved_zip                     | NULLABLE  | STRING    |                                                                  |
-| note                              | NULLABLE  | STRING    |                                                                  |
-| order_id                          | NULLABLE  | STRING    | The order ID is assigned by Shopify. This is the displayed order ID that shows in the store admin (Order Received, , Checkout Completed) |
-| order_tags                        | NULLABLE  | STRING    | The tags associated with orders ()              |
-| page_title                        | NULLABLE  | STRING    | The title of the page (Page Viewed, Product Viewed, etc.)         |
-| path_name                         | NULLABLE  | STRING    | The path of the URL (Page Viewed, Product Viewed, etc.)           |
-| payment_gateway                   | NULLABLE  | STRING    | What user use to pay for the order ()           |
-| phone                             | NULLABLE  | STRING    |                                                                  |
-| publisher_platform                | NULLABLE  | STRING    |                                                                  |
-| replay_env                        | NULLABLE  | STRING    |                                                                  |
-| replay_length_ms                  | NULLABLE  | STRING    |                                                                  |
-| replay_region                     | NULLABLE  | STRING    |                                                                  |
-| replay_start_time                 | NULLABLE  | STRING    |                                                                  |
-| replay_start_url                  | NULLABLE  | STRING    |                                                                  |
-| search_query                      | NULLABLE  | STRING    | The search query of in the website (Search Submitted)             |
-| seq_no                            | NULLABLE  | STRING    |                                                                  |
-| shipping_amount                   | NULLABLE  | STRING    | Total shipping cost (Order Received)                              |
-| shipping_address                  | NULLABLE  | STRING    | The shipping address to where the line items will be shipped (Order Received, Checkout Completed) |
-| source_name                       | NULLABLE  | STRING    |                                                                  |
-| state                             | NULLABLE  | STRING    |                                                                  |
-| tax_amount                        | NULLABLE  | STRING    | Tax Amount (Order Received)                                      |
-| test                              | NULLABLE  | STRING    |                                                                  |
-| time                              | NULLABLE  | TIMESTAMP |                                                                  |
-| tracking_number                   | NULLABLE  | STRING    |                                                                  |
-| total_discounts                   | NULLABLE  | STRING    | The total amount of all discounts applied to the order (Order Received) |
-| total_spent                       | NULLABLE  | STRING    |                                                                  |
-| utm_campaign                      | NULLABLE  | STRING    | The last seen attributed campaign value (Page Viewed, Product Viewed, etc.) |
-| utm_content                       | NULLABLE  | STRING    | The last seen attributed content value (Page Viewed, Product Viewed, etc.) |
-| utm_creative_format               | NULLABLE  | STRING    |                                                                  |
-| utm_id                            | NULLABLE  | STRING    |                                                                  |
-| utm_medium                        | NULLABLE  | STRING    | The last seen attributed medium value (Page Viewed, Product Viewed, etc.) |
-| utm_marketing_tactic              | NULLABLE  | STRING    |                                                                  |
-| utm_source                        | NULLABLE  | STRING    | The last seen attributed source value (Page Viewed, Product Viewed, etc.) |
-| utm_source_platform               | NULLABLE  | STRING    |                                                                  |
-| utm_term                          | NULLABLE  | STRING    | The last seen attributed term value (Page Viewed, Product Viewed, etc.) |
-
-
-### Event Names (export table)
-- Page Viewed: The page_viewed event logs an instance where a buyer visited a page. This event is available on the online store, checkout, and order status pages.
-- Product Viewed: The product_viewed event logs an instance where a buyer visited a product details page. This event is available on the product page.
-- Collection Viewed: The collection_viewed event logs an instance where a buyer visited a product collection index page. This event is available on the online store page
-- $mp_session_record: Session recording event batch sent from client. This is a Mixpanel system event. Use this event if the user wants to see the session replay URLs. The event property name is replay_start_url
-- Order Received: The order_received event is sent when a new order is created at Shopify. This order could be received from the online store or other sources. A received order does not mean an order is paid. An order may have multiple financial statuses. Use financial_status event property to see the orders' status. USE THIS FOR Revenue, order calculations. 
-- Checkout Completed: The checkout_completed event logs when a visitor completes a purchase. This event is available on the order status and checkout pages.
-- Checkout Shipping Info Submitted: The checkout_shipping_info_submitted event logs an instance where the buyer chooses a shipping rate. This event is only available in checkouts where checkout extensibility for customizations is enabled
-- Checkout Started: The checkout_started event logs an instance of a buyer starting the checkout process. This event is available on the checkout page
-- Checkout Address Info Submitted: The checkout_address_info_submitted event logs an instance of a buyer submitting their mailing address. This event is only available in checkouts where checkout extensibility for customizations is enabled
-- Payment Info Submitted: The payment_info_submitted event logs an instance of a buyer submitting their payment information. This event is available on the checkout page
-- Product Added To Cart: The product_added_to_cart event logs an instance where a buyer added a product to the cart. This event is available on the product page.
-- Search Submitted: The search_submitted event logs an instance where a buyer performed a search on the storefront. This event is available on the online store page.
-- Cart Abandoned: The cart_abandoned event logs an instance where a abandons their cart
-- Order Fulfilled: The order_fulfilled event logs when the shop owner has processed and shipped the order
-- Order Delivered: The order_delivered event is sent when an order is delivered, based on the shipment status of the order.
-- Ad Data: Contains advertising data imported from platforms such as Google, Meta, and TikTok. This event includes all UTM parameters (utm_source, utm_medium, utm_campaign, etc.) and is used for analyses involving campaign attribution, cost, conversions, and other ad performance metrics.
-- Ad Geo Data: Contains advertising data imported from platforms such as Google, Meta, and TikTok, focused on geographic breakdowns (e.g., by country or region)  and is used for analyses involving campaign attribution, cost, conversions, and other ad performance metrics.. This event does **not** include UTM parameters and should be used when the analysis requires location-based ad performance rather than campaign attribution.
-- Cart Viewed: The cart_viewed event logs an instance where a customer visited the cart page.
-- Product Removed From Cart: The product_removed_from_cart event logs an instance where a customer removes a product from their cart
-- Checkout Contact Info Submitted: The checkout_contact_info_submitted event logs an instance where a buyer submits a checkout form. This event is only available in checkouts where checkout extensibility for customizations is enabled
-- Order Partially Refunded: The order_partially_refunded event logs when the order is edited to only refund part of the order
-
-
-### Event Property Definitions - `Ad Data`
-
-Ad Data events contain advertising data imported from platforms like Google, Meta, TikTok, etc. These properties are used to calculate advertising cost, impressions, and other ad metrics. Ad data can be joined to user or event data using UTM properties for attribution and analysis.
-
-| Name              | Display Name              | Description                                                                 |
-|-------------------|--------------------------|-----------------------------------------------------------------------------|
-| $source           | Source                   | Name of the source where the data syncs. This will be Vendo data.           |
-| account_id        | Advertising Account ID   | ID of the ad account                                                        |
-| account_name      | Advertising Account Name | Name of the ad account, as displayed via API                                |
-| ad_id             | Ad ID                    | ID of the ad set by the advertising platform.                               |
-| campaign_id       | Campaign ID              | ID of the campaign set by the advertising platform.                         |
-| campaign_name     | Campaign Name            | Name of the campaign as it appears in the advertising platform.             |
-| conversion_value  | Conversion Value         | The value associated with the conversion                                    |
-| conversions       | Conversions              | Number of conversions                                                       |
-| cost_reporting    | Cost Reporting           | The advertising cost converted to the reporting currency in Mixpanel        |
-| cost_source       | Cost Source              | The advertising cost in the source currency of the advertising platform.    |
-| currency_reporting| Currency Reporting       | The reporting currency in Mixpanel.                                         |
-
-
-### Event Property Definitions - `Order Received`
-
-The following table lists key event properties available for the 'Order Received' event. These fields are used for order, revenue, and checkout analyses.
-
-| Name                   | Display Name           | Description                                                                 |
-|------------------------|-----------------------|-----------------------------------------------------------------------------|
-| $source                | Source                | The source of where the data is coming from                                 |
-| app_id                 | App ID                | The ID of the app that created the order                                    |
-| app_name               | App Name              | The name of the app that created the order                                  |
-| billing_address        | Billing Address       | The billing address where the order will be billed to                       |
-| cart_subtotal_amount   | Cart Subtotal Amount  | The price at checkout before duties, shipping, and taxes                    |
-| cart_total_amount      | Cart Total Amount     | The sum of all the items in the checkout, including duties, taxes, and discounts |
-| confirmed              | Confirmed             | Status or the orders if it was confirmed or not                             |
-| currency               | Currency              | The three-letter code that represents the currency, for example, USD. Supported codes include standard ISO 4217 codes, legacy codes, and non-standard codes |
-| custom_order_attributes| Custom Order Attributes| A list of details that have been added to the order.                        |
-| discount               | Discount Codes        | Discount codes for the order                                                |
-| email                  | Email                 | The email attached to this checkout                                         |
-| financial_status       | Financial Status      | The payment state of an order                                             |
-| landing_page           | Landing Page          | The first page a user visits when arriving on a website or app            |
-| note                   | Order Note            | Order note                                                               |
-| order_id               | Order ID              | The order ID is assigned by Shopify. This is the displayed order ID that shows in the store admin |
-| order_status_url       | Order Status URL      | The URL of the page when order was confirmed                              |
-| order_tags             | Order Tags            | The tags associated with orders                                           |
-| payment_gateway        | Payment Gateway       | What user use to pay for the order                                        |
-| products               | Products              | A list of line item objects, each one containing information about an item in the checkout |
-| shipping_address       | Shipping Address      | The shipping address to where the line items will be shipped              |
-| shipping_amount        | Shipping Amount       | Total shipping cost                                                       |
-| shopify_order_id       | Shopify Order ID      | The Shopify Order ID is a global order ID set by Shopify                  |
-| source_name            | Source Name           | The name of the source where the order originated                         |
-| tax_amount             | Tax Amount            | Tax Amount                                                                |
-| test                   | Test                  | Shows whether this order is a test order or not                           |
-| total_discounts        | Total Discounts       | The total amount of all discounts applied to the order                    |
-| vendo_tracking_version | Vendo Tracking Version| Vendo tracking version                                                    |
-
-
-### Event Property Definitions -  `products` event property object (for product-related events)
-
-The `products` field is a repeated RECORD (array of objects) present in the following events:
-- Product Viewed
-- Collection Viewed
-- Product Added To Cart
-- Checkout Started
-- Checkout Shipping Info Submitted
-- Payment Info Submitted
-- Product Removed From Cart
-- Checkout Completed
-- Order Fulfilled
-
-| Name             | Type     | Example Value                                   | Description                                                      |
-|------------------|----------|------------------------------------------------|------------------------------------------------------------------|
-| id               | INTEGER  | 9882896204064                                  | Unique product ID                                                |
-| price            | FLOAT    | 407.54                                         | Product price at the time of event                               |
-| product_type     | STRING   | "Red Light Panel"                              | Type/category of the product                                     |
-| quantity         | INTEGER  | 1                                              | Quantity of this product in the event                            |
-| sku              | STRING   | "AB123"                                        | Product SKU (Stock Keeping Unit)                                 |
-| title            | STRING   | "Red Light Therapy Panel - Pro60 (New)"        | Product title/name                                               |
-| variant_id       | INTEGER  | 50088217215264                                 | Unique ID for the product variant                                |
-| variant_price    | FLOAT    | 399                                            | Price of the specific variant                                    |
-| variant_sku      | STRING   | "AB123-2"                                      | SKU for the product variant                                      |
-| variant_title    | STRING   | "Red Light Therapy Panel - Pro60 (New) - Black"| Title/name of the product variant                                |
-| variant_unit_cost| FLOAT    | 250                                            | Unit cost of the variant (COGS)                                  |
-| vendor           | STRING   | "Piri Red"                                     | Vendor or brand name                                             |
-
-
-
+Use {schemas} to get data that is available. 
 
 
 ## Customer Examples
@@ -878,4 +613,30 @@ LIMIT 10
 
 **Explanation:**
 Returns order counts by city for the last 30 days, limited to top 10 cities, then generates a bar chart for categorical comparison. Bar chart is appropriate for comparing quantities across categories.
+
+### Example 14: Profit per Product Analysis (Revenue minus COGS)
+**User Request:** "Show me profit per product by removing cost of goods sold of top 10 products."
+
+**SQL Query:**
+```sql
+SELECT
+  JSON_VALUE(product, '$.title') AS product_title,
+  SUM(CAST(JSON_VALUE(product, '$.price') AS FLOAT64)) AS total_revenue,
+  SUM(CAST(JSON_VALUE(product, '$.variant_unit_cost') AS FLOAT64)) AS total_cogs,
+  SUM(CAST(JSON_VALUE(product, '$.price') AS FLOAT64)) - SUM(CAST(JSON_VALUE(product, '$.variant_unit_cost') AS FLOAT64)) AS total_profit
+FROM
+  `{event_table}`,
+  UNNEST(JSON_QUERY_ARRAY(products)) AS product
+WHERE
+  event = 'Order Received'
+  AND DATE(time) BETWEEN DATE_SUB(DATE('2025-05-28'), INTERVAL 12 MONTH) AND DATE('2025-05-28')
+GROUP BY
+  product_title
+ORDER BY
+  total_revenue DESC
+LIMIT 10
+```
+
+**Explanation:**
+Calculates profit per product by subtracting COGS (cost of goods sold) from revenue. Uses the `products` object to extract product title, price, and variant unit cost. Returns total revenue, total COGS, and calculated profit for each product, ordered by revenue. The date range covers the last 12 months from the specified date.
 """

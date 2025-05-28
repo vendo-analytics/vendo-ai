@@ -61,3 +61,26 @@ def query_bigquery(query: str):
         print(error_msg)
         return error_msg
 
+def get_bigquery_schema():
+    credentials = service_account.Credentials.from_service_account_file(
+            'service_key.json',
+            scopes=['https://www.googleapis.com/auth/cloud-platform']
+        )
+    client = bigquery.Client()
+
+    table_ref = "gam-dwh.mixpanel_data_3266709.mixpanel_all_data_export_20250509"
+    table = client.get_table(table_ref)
+
+    schema = []
+    for field in table.schema:
+        schema.append({
+            "name": field.name,
+            "type": field.field_type,
+            "mode": field.mode,
+            "description": field.description or ""
+        })
+
+    print(schema)
+    return schema
+
+get_bigquery_schema()

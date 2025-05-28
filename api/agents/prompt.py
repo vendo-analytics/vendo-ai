@@ -51,7 +51,7 @@ You are the root agent in a multi-agent analytics assistant system. Your job is 
 
 ---
 
-## User Properties (get from global context)
+## User Properties (get from context)
 
 
 ## CHEAT SHEET

@@ -114,45 +114,44 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, user_id: str
                 continue
 
             with tracer.start_as_current_span("user_message") as span:
-                span_ctx = span.get_span_context()
-                active_contexts[user_id] = span_ctx
+                
                 #session_service.append_message(str(user_id), "user", content)
 
-            context = get_context(user_id)
+                context = get_context(user_id)
 
-            full_input = "\n\n".join(context + [content])
-            content_obj = Content(role="user", parts=[Part.from_text(text=full_input)])
+                full_input = "\n\n".join(context + [content])
+                content_obj = Content(role="user", parts=[Part.from_text(text=full_input)])
 
-            result = runner.run_async(session_id=str(session_id), user_id=user_id, new_message=content_obj)
+                result = runner.run_async(session_id=str(session_id), user_id=user_id, new_message=content_obj)
 
-            result_text = ""
-            async for event in result:
-                # 🎤 Check if this event contains audio data
-                is_audio = event.content and event.content.parts and event.content.parts[0].inline_data and event.content.parts[0].inline_data.mime_type.startswith("audio/pcm")
-                
-                if is_audio:
-                    audio_data = event.content.parts[0].inline_data.data
-                    if audio_data:
-                        message = {
-                            "mime_type": "audio/pcm",
-                            "data": base64.b64encode(audio_data).decode("ascii")
-                        }
-                        await websocket.send_text(json.dumps(message))
-                        print(f"[AGENT TO CLIENT]: audio/pcm: {len(audio_data)} bytes.")
-                        continue
+                result_text = ""
+                async for event in result:
+                    # 🎤 Check if this event contains audio data
+                    is_audio = event.content and event.content.parts and event.content.parts[0].inline_data and event.content.parts[0].inline_data.mime_type.startswith("audio/pcm")
                     
-                if event.is_final_response():
-                    if event.content and event.content.parts:
-                        result_text = event.content.parts[0].text
-                    break
+                    if is_audio:
+                        audio_data = event.content.parts[0].inline_data.data
+                        if audio_data:
+                            message = {
+                                "mime_type": "audio/pcm",
+                                "data": base64.b64encode(audio_data).decode("ascii")
+                            }
+                            await websocket.send_text(json.dumps(message))
+                            print(f"[AGENT TO CLIENT]: audio/pcm: {len(audio_data)} bytes.")
+                            continue
+                        
+                    if event.is_final_response():
+                        if event.content and event.content.parts:
+                            result_text = event.content.parts[0].text
+                        break
 
-            #session_service.append_message(str(user_id), "assistant", result_text)
-            await websocket.send_text(json.dumps({
-                "mime_type": "text/plain",
-                "data": result_text,
-                "turn_complete": True,
-                 "is_speech": True
-            }))
+                #session_service.append_message(str(user_id), "assistant", result_text)
+                await websocket.send_text(json.dumps({
+                    "mime_type": "text/plain",
+                    "data": result_text,
+                    "turn_complete": True,
+                    "is_speech": True
+                }))
 
     except WebSocketDisconnect:
         print(f"[DISCONNECTED] #{session_id}")

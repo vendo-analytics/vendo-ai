@@ -48,6 +48,7 @@ interface MultimodalInputProps {
   isRecording: boolean;
   isAudioEnabled?: boolean;
   setIsAudioEnabled: (enabled: boolean) => void;
+  stopTTS?: () => void;
 }
 
 export function MultimodalInput({
@@ -64,7 +65,8 @@ export function MultimodalInput({
   stopListening,
   isRecording,
   isAudioEnabled = false,
-  setIsAudioEnabled
+  setIsAudioEnabled,
+  stopTTS
 }: MultimodalInputProps) {
   console.log("[MultimodalInput] Rendering with isAudioEnabled:", isAudioEnabled);
 
@@ -126,11 +128,16 @@ export function MultimodalInput({
     console.log("[MultimodalInput] Audio toggle clicked, current state:", isAudioEnabled);
     if (typeof setIsAudioEnabled === 'function') {
       console.log("[MultimodalInput] Calling setIsAudioEnabled");
-      setIsAudioEnabled(!isAudioEnabled);
+      const newState = !isAudioEnabled;
+      setIsAudioEnabled(newState);
+      // If turning off audio, immediately stop any playing TTS
+      if (!newState && stopTTS) {
+        stopTTS();
+      }
     } else {
       console.error("[MultimodalInput] setIsAudioEnabled is not a function:", setIsAudioEnabled);
     }
-  }, [isAudioEnabled, setIsAudioEnabled]);
+  }, [isAudioEnabled, setIsAudioEnabled, stopTTS]);
 
   return (
     <div className="relative w-full flex flex-col gap-4">

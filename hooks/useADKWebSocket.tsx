@@ -289,9 +289,17 @@ export function useADKWebSocket({
     // Stop current audio playback
     if (currentUtterance.current) {
       currentUtterance.current.pause();
+      currentUtterance.current.currentTime = 0; // Reset to beginning
       currentUtterance.current = null;
     }
   }, []);
+
+  // Watch for audio enabled changes and stop TTS when disabled
+  useEffect(() => {
+    if (!callbacksRef.current.isAudioEnabled) {
+      stopTTS();
+    }
+  }, [callbacksRef.current.isAudioEnabled, stopTTS]);
 
   const sendUserMessage = useCallback(async (message: string) => {
     if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
@@ -550,6 +558,7 @@ export function useADKWebSocket({
     stopListening, 
     isRecording,
     isAudioEnabled,
-    setIsAudioEnabled: setIsAudioEnabled || (() => {}) // Provide a no-op function if not provided
+    setIsAudioEnabled: setIsAudioEnabled || (() => {}), // Provide a no-op function if not provided
+    stopTTS // Expose stopTTS function
   };
 }

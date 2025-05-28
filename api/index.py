@@ -30,7 +30,7 @@ load_dotenv()
 
 # Firebase session setup
 APP_NAME = "ADK Non-Streaming"
-#session_service = FirestoreSessionService(collection_name="vendo_ai_memory")
+firestore_session_service = FirestoreSessionService(collection_name="vendo_ai_memory")
 session_service = InMemorySessionService()
 # Tracing setup
 LANGFUSE_AUTH = base64.b64encode(
@@ -63,13 +63,13 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True,
 
 active_contexts = {}
 
-def get_context(user_query: str, user_id: str, k=3, min_similarity=0.0):
+def get_context(user_id: str):
     try:
-        messages = session_service.get_all_messages(user_id)
+        messages = firestore_session_service.get_all_messages(user_id)
         if not messages:
             return []
         contents = [msg["content"] for msg in messages if msg.get("content")]
-        return contents[:k]
+        return contents
     except Exception as e:
         logger.error(f"[context] Error: {e}")
         return []
@@ -118,8 +118,8 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, user_id: str
                 active_contexts[user_id] = span_ctx
                 #session_service.append_message(str(user_id), "user", content)
 
-            #context = get_context(content, user_id)
-            context = []
+            context = get_context(user_id)
+
             full_input = "\n\n".join(context + [content])
             content_obj = Content(role="user", parts=[Part.from_text(text=full_input)])
 
@@ -127,6 +127,20 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, user_id: str
 
             result_text = ""
             async for event in result:
+                # 🎤 Check if this event contains audio data
+                is_audio = event.content and event.content.parts and event.content.parts[0].inline_data and event.content.parts[0].inline_data.mime_type.startswith("audio/pcm")
+                
+                if is_audio:
+                    audio_data = event.content.parts[0].inline_data.data
+                    if audio_data:
+                        message = {
+                            "mime_type": "audio/pcm",
+                            "data": base64.b64encode(audio_data).decode("ascii")
+                        }
+                        await websocket.send_text(json.dumps(message))
+                        print(f"[AGENT TO CLIENT]: audio/pcm: {len(audio_data)} bytes.")
+                        continue
+                    
                 if event.is_final_response():
                     if event.content and event.content.parts:
                         result_text = event.content.parts[0].text
@@ -163,10 +177,10 @@ async def get_chat_history(user_id: str = Query(...)):
 @app.get("/api/context/requirements")
 async def get_all_requirements(user_id: str = Query(...)):
     try:
-        mixpanel_dataset_id = session_service.get_user_mixpanel_dataset_id(str(user_id))
+        mixpanel_dataset_id = firestore_session_service.get_user_mixpanel_dataset_id(str(user_id))
         if mixpanel_dataset_id:
             print(f"[INFO] Mixpanel Dataset ID for {user_id}: {mixpanel_dataset_id}")
-        messages = session_service.get_all_requirements(str(user_id), message_type="requirements")
+        messages = firestore_session_service.get_all_requirements(str(user_id), message_type="requirements")
         return messages or []
     except Exception as e:
         logger.error(f"[GET /context/requirements] {e}")
@@ -183,7 +197,7 @@ async def add_knowledge_requirement(request: dict):
         if not user_id or not content:
             return {"error": "user_id and content are required"}, 400
 
-        session_service.append_message(
+        firestore_session_service.append_message(
             str(user_id),
             "user",
             content,
@@ -207,7 +221,7 @@ async def update_knowledge_requirement(request: dict):
         if not user_id or index is None or not new_content:
             return {"error": "user_id, index, and new_content are required"}, 400
 
-        success = session_service.update_requirement_by_index(
+        success = firestore_session_service.update_requirement_by_index(
             str(user_id),
             int(index),
             new_content,
@@ -233,7 +247,7 @@ async def delete_knowledge_requirement(request: dict):
         if not user_id or index is None:
             return {"error": "user_id and index are required"}, 400
 
-        success = session_service.delete_requirement_by_index(
+        success = firestore_session_service.delete_requirement_by_index(
             str(user_id),
             int(index),
             message_type=message_type

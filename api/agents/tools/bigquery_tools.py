@@ -1,5 +1,5 @@
 from typing import Dict, List, Optional, TypedDict, Any
-from datetime import datetime
+from datetime import datetime, date
 import pandas as pd
 from langgraph.graph import Graph, StateGraph
 from langgraph.checkpoint.memory import InMemorySaver
@@ -7,6 +7,18 @@ from langgraph.types import interrupt, Command
 from google.cloud import bigquery
 from google.oauth2 import service_account
 
+def convert_dates_to_strings(obj):
+    """
+    Recursively convert date/datetime objects to strings for JSON serialization.
+    """
+    if isinstance(obj, (date, datetime)):
+        return obj.isoformat()
+    elif isinstance(obj, dict):
+        return {key: convert_dates_to_strings(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_dates_to_strings(item) for item in obj]
+    else:
+        return obj
 
 def query_bigquery(query: str):
     print("▶️ get_event_data()")
@@ -21,6 +33,10 @@ def query_bigquery(query: str):
         
         print(event_data_df)
         result_data = event_data_df.to_dict(orient='records')
+        
+        # Convert date objects to strings for JSON serialization
+        result_data = convert_dates_to_strings(result_data)
+        
         if len(result_data) == 0:
             message = "✅ Query executed successfully, but no rows were returned."
         else:

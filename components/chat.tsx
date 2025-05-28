@@ -27,7 +27,7 @@ export function Chat() {
     // Optionally implement stop signal over WebSocket later
   }
 
-  const { sendUserMessage, startListening, stopListening, isConnected, isRecording } = useADKWebSocket({
+  const { sendUserMessage, startListening, stopListening, isConnected, isRecording, stopTTS } = useADKWebSocket({
     onTextMessage: (chunk: string, isFinal = false, isPartial = false, role?: "user" | "assistant") => {
       setMessages((prev) => {
         if (!chunk) return prev
@@ -127,7 +127,12 @@ export function Chat() {
             isEnabled={isAudioEnabled}
             onToggle={() => {
               console.log("[Audio] Toggle clicked, current state:", isAudioEnabled)
-              setIsAudioEnabled(!isAudioEnabled)
+              const newState = !isAudioEnabled
+              setIsAudioEnabled(newState)
+              // If turning off audio, immediately stop any playing TTS
+              if (!newState && stopTTS) {
+                stopTTS()
+              }
             }}
           />
           <button
@@ -208,6 +213,7 @@ export function Chat() {
           isRecording={isRecording}
           isAudioEnabled={isAudioEnabled}
           setIsAudioEnabled={setIsAudioEnabled}
+          stopTTS={stopTTS}
         />
       </div>
     </div>

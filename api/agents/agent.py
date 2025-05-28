@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Import client information
-from .business_context.client_info import get_client_info
+#from .business_context.client_info import get_client_info
 
 from .prompt import (
     ROOT_AGENT_INSTRUCTION
@@ -39,32 +39,6 @@ from google.genai.types import (
 )
 
 
-def setup_before_agent_call(callback_context: CallbackContext):
-    """Setup the agent with client information."""
-    
-    # Get user_id from session
-    user_id = getattr(callback_context.session, 'user_id', '001')
-    
-    # Check if we need to refresh client info
-    # Refresh if: 1) Not cached, 2) Explicitly marked for refresh, 3) Older than 5 minutes
-    should_refresh = (
-        "client_info" not in callback_context.state or
-        callback_context.state.get("refresh_client_info", False) or
-        (callback_context.state.get("client_info_timestamp", 0) < (date.today().timestamp() - 300))  # 5 minutes
-    )
-    
-    if should_refresh:
-        print(f"[DEBUG] Refreshing client info for user_id: {user_id}", flush=True)
-        
-        # Get client info from Firebase with fallback
-        client_info = get_client_info(user_id)
-        callback_context.state["client_info"] = client_info
-        callback_context.state["client_info_timestamp"] = date.today().timestamp()
-        callback_context.state["refresh_client_info"] = False
-    
-    # TODO: Loading Database Schema into Agent Instructions
-client = genai.Client(http_options=HttpOptions(api_version="v1beta1"))
-model_id = "gemini-2.0-flash-live-preview-04-09"
 # ────────────────────────────────────────────────────────────────────────────
 # Root orchestration agent
 # ────────────────────────────────────────────────────────────────────────────
@@ -88,6 +62,6 @@ root_agent = Agent(
         AgentTool(agent=google_search),
         #load_artifacts, 
     ],
-    before_agent_callback=setup_before_agent_call, #Add client context, schemas
+    #before_agent_callback=setup_before_agent_call, #Add client context, schemas
     #generate_content_config=types.GenerateContentConfig(temperature=0.01),
 )

@@ -323,7 +323,7 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId }: K
 
         {/* Content Items Section */}
         <SidebarGroup>
-          <SidebarGroupLabel>Content Items ({filteredContent.length})</SidebarGroupLabel>
+          <SidebarGroupLabel>Documents({filteredContent.length})</SidebarGroupLabel>
 
           <SidebarGroupContent>
             {/* Add New Item Form */}

@@ -81,7 +81,7 @@ export function useADKWebSocket({
   onTextMessage,
   onAudioMessage,
   onTurnComplete,
-  isAudioEnabled = true,
+  isAudioEnabled = false,
   setIsAudioEnabled,
 }: Props) {
   const ws = useRef<WebSocket | null>(null);

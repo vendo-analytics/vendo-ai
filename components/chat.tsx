@@ -16,7 +16,7 @@ export function Chat() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState<string>("")
   const [isLoading, setIsLoading] = useState<boolean>(false)
-  const [isAudioEnabled, setIsAudioEnabled] = useState(true)
+  const [isAudioEnabled, setIsAudioEnabled] = useState(false)
 
   const append = async (message: Message | CreateMessage, chatRequestOptions?: ChatRequestOptions): Promise<string> => {
     setMessages((prev) => [...prev, message as Message])

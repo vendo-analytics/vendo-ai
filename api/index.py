@@ -5,6 +5,7 @@ import logging
 import asyncio
 import numpy as np
 from pathlib import Path
+from datetime import date
 from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,8 +20,13 @@ from google.adk.agents.run_config import RunConfig
 from google.genai.types import Content, Part
 from .firebase_client import FirestoreSessionService, embed_text
 from .agents.agent import root_agent
+from .agents.business_data.business_info import FALLBACK_CLIENT_INFO
 from .tts_service import router as tts_router
 from google.adk.sessions import InMemorySessionService
+from .firestore_instance import firestore_session_service
+from google.adk.agents.callback_context import CallbackContext
+from api.state_manager import update_business_context_in_state
+
 # Logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -30,7 +36,6 @@ load_dotenv()
 
 # Firebase session setup
 APP_NAME = "ADK Non-Streaming"
-firestore_session_service = FirestoreSessionService(collection_name="vendo_ai_memory")
 session_service = InMemorySessionService()
 # Tracing setup
 LANGFUSE_AUTH = base64.b64encode(
@@ -107,17 +112,19 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, user_id: str
     try:
         while True:
             msg = await websocket.receive_text()
+            
             data = json.loads(msg)
             content = data.get("data", "")
 
             if not content:
                 continue
-
+                   
             with tracer.start_as_current_span("user_message") as span:
                 
                 #session_service.append_message(str(user_id), "user", content)
 
                 context = get_context(user_id)
+                
 
                 full_input = "\n\n".join(context + [content])
                 content_obj = Content(role="user", parts=[Part.from_text(text=full_input)])
@@ -132,6 +139,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, user_id: str
                 span.set_attribute("gen_ai.response.model", "gemini-2.0-flash")
 
                 result_text = ""
+                
                 async for event in result:
                     # 🎤 Check if this event contains audio data
                     is_audio = event.content and event.content.parts and event.content.parts[0].inline_data and event.content.parts[0].inline_data.mime_type.startswith("audio/pcm")
@@ -148,6 +156,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, user_id: str
                             continue
                         
                     if event.is_final_response():
+     
                         if event.content and event.content.parts:
                             result_text = event.content.parts[0].text
                             span.set_attribute("output", result_text)
@@ -157,7 +166,8 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, user_id: str
                             span.set_attribute("gen_ai.usage.completion_tokens", output_token_count)
                             span.set_attribute("gen_ai.usage.total_tokens", output_token_count)
                             span.set_attribute("gen_ai.response.model", "gemini-2.0-flash")
-                        break
+                            print(f"[DEBUG] {result_text}", flush=True)
+                        
 
                 #session_service.append_message(str(user_id), "assistant", result_text)
                 await websocket.send_text(json.dumps({
@@ -166,7 +176,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, user_id: str
                     "turn_complete": True,
                     "is_speech": True
                 }))
-
+                
     except WebSocketDisconnect:
         print(f"[DISCONNECTED] #{session_id}")
     except Exception as e:
@@ -294,6 +304,7 @@ async def update_business_context(request: dict):
     try:
         user_id = request.get("user_id")
         business_context = request.get("business_context")
+        print(f"[DEBUG1] Business context: {business_context}", flush=True)
 
         if not user_id or not business_context:
             return {"error": "user_id and business_context are required"}, 400
@@ -302,22 +313,13 @@ async def update_business_context(request: dict):
         firestore_session_service.collection.document(str(user_id)).set({
             "business_context": business_context
         }, merge=True)
+
+        update_business_context_in_state(user_id, business_context)
         
-        # Clear cached client_info from active sessions to force reload
-        # This ensures the agent picks up the new business context on next call
-        for session_id, context in active_contexts.items():
-            if hasattr(context, 'state') and 'client_info' in context.state:
-                del context.state['client_info']
-                print(f"[DEBUG] Cleared cached client_info for session {session_id}")
-        
-        # Also set refresh flag for any active callback contexts
-        # This works with the modified setup_before_agent_call function
-        for session_id, context in active_contexts.items():
-            if hasattr(context, 'state'):
-                context.state['refresh_client_info'] = True
-                print(f"[DEBUG] Set refresh flag for session {session_id}")
         
         return {"success": True, "message": "Business context updated successfully"}
     except Exception as e:
         logger.error(f"[PUT /context/business] {e}")
         return {"error": str(e)}, 500
+
+

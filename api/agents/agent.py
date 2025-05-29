@@ -12,30 +12,81 @@ from google.adk.agents import Agent
 from google.adk.tools.agent_tool import AgentTool
 from google.adk.tools import google_search, FunctionTool  # Import the tool
 from google.adk.agents.callback_context import CallbackContext # Or ToolContext
-from google.adk.tools import load_artifacts
-import google.genai as genai
+from google.adk.tools import google_search, load_artifacts
 
-date_today = date.today()
+from .prompt import (ROOT_AGENT_INSTRUCTION, GOOGLE_SEARCH_INSTRUCTION)
+
+from .sub_agents.data_retrieval.agent import data_retrieval
+from .sub_agents.data_planner.agent import data_planner
+from .sub_agents.analyst.agent import analyst_agent
 
 from dotenv import load_dotenv
 load_dotenv()
+from .business_data.business_info import get_info
 
 # Import client information
-#from .business_context.client_info import get_client_info
-
-from .prompt import (
-    ROOT_AGENT_INSTRUCTION
+from .business_data.schemas import (
+    get_user_table_schema,
+    get_event_table_schema,
+    get_event_names,
+    get_ad_data_properties,
+    get_order_received_properties,
+    get_products_object_schema,
+    get_product_events,
+    format_user_table_schema_for_prompt,
+    format_event_table_schema_for_prompt,
+    format_event_names_for_prompt,
+    format_all_schemas_for_prompt
 )
 
-from .sub_agents.data_planner.agent import data_planner
-from .sub_agents.query.agent import query_agent
-from google import genai
-from google.genai.types import (
-    Content,
-    LiveConnectConfig,
-    HttpOptions,
-    Modality,
-    Part,
+date_today = date.today()
+
+
+
+def setup_before_agent_call(callback_context: CallbackContext):
+    """Setup the agent with client information."""
+
+    # Get user_id from session
+    #user_id = getattr(callback_context.session, 'user_id', '001')
+    user_id = "001"
+    
+    # Load client information into session state 
+    
+    business_context = get_info(user_id)
+    print(f"[DEBUG] Business context: {business_context}", flush=True)
+    #business_context = None
+    callback_context.state["business_context"] = business_context
+    callback_context.state["user_id"] = user_id
+    callback_context.state["dataset_id"] = business_context["dataset_id"]
+    print(f"[DEBUG] Loaded business context for user {user_id}", flush=True)
+    
+    user_table = f"gam-dwh.{business_context['dataset_id']}.engage"
+    event_table = f"gam-dwh.{business_context['dataset_id']}.export"
+
+    callback_context.state["user_table"] = user_table
+    callback_context.state["event_table"] = event_table
+
+    
+    # Add individual schema components to the state
+    callback_context.state["user_table_schema"] = get_user_table_schema()
+    callback_context.state["event_table_schema"] = get_event_table_schema()
+    callback_context.state["event_names"] = get_event_names()
+    callback_context.state["ad_data_properties"] = get_ad_data_properties()
+    callback_context.state["order_received_properties"] = get_order_received_properties()
+    callback_context.state["products_object_schema"] = get_products_object_schema()
+    callback_context.state["product_events"] = get_product_events()
+    
+    # Add formatted schemas to the state
+    callback_context.state["schemas"] = format_all_schemas_for_prompt(user_table, event_table)
+
+
+# google search agent
+google_search_agent = Agent(
+    model=os.getenv("MODEL_GEMINI"),
+    name='google_search',
+    description="Google search agent",
+    instruction=GOOGLE_SEARCH_INSTRUCTION,
+    tools=[google_search]
 )
 
 
@@ -43,7 +94,7 @@ from google.genai.types import (
 # Root orchestration agent
 # ────────────────────────────────────────────────────────────────────────────
 root_agent = Agent(
-    name="agent_router",
+    name="root_agent",
     model=os.getenv("MODEL_GEMINI"),
     description="Job is to route the user's request to the right sub-agent.",
     instruction=ROOT_AGENT_INSTRUCTION,
@@ -51,17 +102,17 @@ root_agent = Agent(
         f"""
         You are a Data Science and Data Analytics Multi Agent System.
         Today's date: {date_today}
-        When transferring to another agent, use default_api.transfer_to_agent(agent_name)
         """
     ),
     sub_agents=[
-        query_agent,
-        data_planner
+        data_retrieval,
+        data_planner,
+        analyst_agent
     ],
     tools=[
-        AgentTool(agent=google_search),
+        AgentTool(agent=google_search_agent),
         #load_artifacts, 
     ],
-    #before_agent_callback=setup_before_agent_call, #Add client context, schemas
-    #generate_content_config=types.GenerateContentConfig(temperature=0.01),
+    before_agent_callback=setup_before_agent_call, #Add client context, schemas
+    generate_content_config=types.GenerateContentConfig(temperature=0.01),
 )

@@ -1,29 +1,76 @@
+"use client"
+
+import { useState } from "react"
 import { Chat } from "@/components/chat"
+import { BusinessContextEditor } from "@/components/business-context-editor"
 import { KnowledgeSidebar } from "@/components/knowledge-sidebar"
-import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
+import { SidebarInset } from "@/components/ui/sidebar"
 import { Navbar } from "@/components/navbar"
+import { Separator } from "@/components/ui/separator"
+import { Button } from "@/components/ui/button"
+import { MenuIcon } from "@/components/icons"
+import { useSidebar } from "@/components/ui/sidebar"
+import { EventsView } from "@/components/events-view"
+import { EventDetails } from "@/components/event-details"
+
+function CustomSidebarTrigger() {
+  const { toggleSidebar } = useSidebar()
+
+  return (
+    <Button variant="ghost" size="icon" onClick={toggleSidebar} className="h-8 w-8">
+      <MenuIcon size={16} />
+      <span className="sr-only">Toggle Sidebar</span>
+    </Button>
+  )
+}
 
 export default function Page() {
+  const [currentView, setCurrentView] = useState<"chat" | "business-context" | "events" | "event-details">("chat")
+  const [selectedEvent, setSelectedEvent] = useState<any>(null)
+
+  const getPageTitle = () => {
+    switch (currentView) {
+      case "business-context":
+        return "Business Context"
+      case "events":
+        return "Events"
+      case "event-details":
+        return "Event Details"
+      case "chat":
+      default:
+        return "AI Chat with Knowledge Base"
+    }
+  }
+
+  const handleNavigate = (view: "chat" | "business-context" | "events" | "event-details") => {
+    setCurrentView(view)
+    if (view !== "event-details") {
+      setSelectedEvent(null)
+    }
+  }
+
+  const handleSelectEvent = (event: any) => {
+    setSelectedEvent(event)
+    setCurrentView("event-details")
+  }
+
   return (
     <>
-      <KnowledgeSidebar />
+      <KnowledgeSidebar onNavigate={handleNavigate} currentView={currentView} selectedEventId={selectedEvent?.id} />
       <SidebarInset>
-        <div className="flex flex-col h-full">
-          {/* Top Navigation Bar */}
-          <div className="flex items-center justify-between px-4 py-2 border-b bg-background">
-            <div className="flex items-center gap-2">
-              <SidebarTrigger />
-              <h1 className="text-xl font-bold">Vendo AI Chat</h1>
-            </div>
-            <div className="hidden md:block">
-              <Navbar />
-            </div>
+        <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
+          <CustomSidebarTrigger />
+          <Separator orientation="vertical" className="mr-2 h-4" />
+          <h1 className="text-xl font-bold">{getPageTitle()}</h1>
+          <div className="ml-auto hidden md:block">
+            <Navbar />
           </div>
-
-          {/* Chat Component */}
-          <div className="flex-1 overflow-hidden">
-            <Chat />
-          </div>
+        </header>
+        <div className="flex flex-1 flex-col">
+          {currentView === "chat" && <Chat />}
+          {currentView === "business-context" && <BusinessContextEditor />}
+          {currentView === "events" && <EventsView onSelectEvent={handleSelectEvent} />}
+          {currentView === "event-details" && selectedEvent && <EventDetails event={selectedEvent} />}
         </div>
       </SidebarInset>
     </>

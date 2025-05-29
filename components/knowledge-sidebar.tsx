@@ -15,10 +15,9 @@ import {
 } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { PlusIcon, PencilEditIcon, TrashIcon, CheckCirclFillIcon, CrossIcon } from "./icons"
+import { PlusIcon, PencilEditIcon, TrashIcon, CheckCirclFillIcon, CrossIcon, UserIcon } from "./icons"
 import { toast } from "sonner"
+import { MessageCircle } from "lucide-react"
 
 // Firebase API functions - integrated with your backend
 const fetchFirebaseContent = async (userId = "001") => {
@@ -52,43 +51,6 @@ const fetchFirebaseContent = async (userId = "001") => {
   } catch (error) {
     console.error("Error fetching Firebase content:", error)
     return []
-  }
-}
-
-const fetchBusinessContext = async (userId = "001") => {
-  try {
-    const response = await fetch(`/api/context/business?user_id=${userId}`)
-    if (!response.ok) {
-      if (response.status === 404) {
-        console.log("No business context found in Firebase, using defaults")
-        return null
-      }
-      throw new Error("Failed to fetch business context")
-    }
-    const data = await response.json()
-    console.log("Business context from Firebase:", data)
-    return data
-  } catch (error) {
-    console.error("Error fetching business context:", error)
-    return null
-  }
-}
-
-const updateBusinessContext = async (userId: string, businessContext: BusinessContext) => {
-  try {
-    const response = await fetch("/api/context/business", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user_id: userId,
-        business_context: businessContext,
-      }),
-    })
-    if (!response.ok) throw new Error("Failed to update business context")
-    return true
-  } catch (error) {
-    console.error("Error updating business context:", error)
-    throw error
   }
 }
 
@@ -179,22 +141,14 @@ interface ContentItem {
   index: number
 }
 
-interface BusinessContext {
-  name: string
-  preferred_name: string
-  user_id: string
-  company_name: string
-  company_short: string
-  origin_country: string
-  countries_served: string
-  timezone: string
-  currency: string
-  annual_target: string
-  current_date: string
-  dataset_id: string
+// Update the KnowledgeSidebarProps interface to include events view
+interface KnowledgeSidebarProps {
+  onNavigate: (view: "chat" | "business-context" | "events" | "event-details") => void
+  currentView: "chat" | "business-context" | "events" | "event-details"
+  selectedEventId?: string
 }
 
-export function KnowledgeSidebar() {
+export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId }: KnowledgeSidebarProps) {
   const [contentItems, setContentItems] = useState<ContentItem[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState("")
@@ -202,24 +156,6 @@ export function KnowledgeSidebar() {
   const [isAddingNew, setIsAddingNew] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [isLoading, setIsLoading] = useState(true)
-
-  // Business Context State
-  const [businessContext, setBusinessContext] = useState<BusinessContext>({
-    name: "Suraj Kaya",
-    preferred_name: "Suraj",
-    user_id: "test_user",
-    company_name: "Growth Analytics Marketing",
-    company_short: "GAM",
-    origin_country: "AU",
-    countries_served: "Global",
-    timezone: "Australia/Sydney",
-    currency: "AUD",
-    annual_target: "$1.2M",
-    current_date: "2025-05-21",
-    dataset_id: "1234567890"
-  })
-  const [isEditingContext, setIsEditingContext] = useState(false)
-  const [editingContext, setEditingContext] = useState<BusinessContext>(businessContext)
 
   // Fetch content on component mount
   useEffect(() => {
@@ -229,28 +165,6 @@ export function KnowledgeSidebar() {
         const items = await fetchFirebaseContent()
         console.log("Loaded items:", items)
         setContentItems(items)
-        
-        // Load business context from Firebase
-        const firebaseBusinessContext = await fetchBusinessContext("001")
-        if (firebaseBusinessContext) {
-          // Merge with default values to ensure all required fields are present
-          const mergedContext = {
-            name: firebaseBusinessContext.name || "Suraj Kaya",
-            preferred_name: firebaseBusinessContext.preferred_name || "Suraj",
-            user_id: firebaseBusinessContext.user_id || "test_user",
-            company_name: firebaseBusinessContext.company_name || "Growth Analytics Marketing",
-            company_short: firebaseBusinessContext.company_short || "GAM",
-            origin_country: firebaseBusinessContext.origin_country || "AU",
-            countries_served: firebaseBusinessContext.countries_served || "Global",
-            timezone: firebaseBusinessContext.timezone || "Australia/Sydney",
-            currency: firebaseBusinessContext.currency || "AUD",
-            annual_target: firebaseBusinessContext.annual_target || "$1.2M",
-            current_date: firebaseBusinessContext.current_date || "2025-05-21",
-            dataset_id: firebaseBusinessContext.dataset_id || "1234567890"
-          }
-          setBusinessContext(mergedContext)
-          setEditingContext(mergedContext)
-        }
       } catch (error) {
         toast.error("Failed to load content")
         console.error("Error loading content:", error)
@@ -338,38 +252,11 @@ export function KnowledgeSidebar() {
     }
   }
 
-  // Business Context Handlers
-  const handleEditContext = () => {
-    setEditingContext(businessContext)
-    setIsEditingContext(true)
-  }
-
-  const handleSaveContext = async () => {
-    try {
-      await updateBusinessContext("001", editingContext)
-      setBusinessContext(editingContext)
-      setIsEditingContext(false)
-      toast.success("Business context updated successfully")
-    } catch (error) {
-      toast.error("Failed to update business context")
-      console.error("Error updating business context:", error)
-    }
-  }
-
-  const handleCancelContext = () => {
-    setEditingContext(businessContext)
-    setIsEditingContext(false)
-  }
-
-  const handleContextChange = (field: keyof BusinessContext, value: string) => {
-    setEditingContext((prev) => ({ ...prev, [field]: value }))
-  }
-
   return (
     <Sidebar>
       <SidebarHeader>
         <div className="flex items-center justify-between p-2">
-          <h2 className="text-lg font-semibold">Context</h2>
+          <h2 className="text-lg font-semibold">Knowledge Base</h2>
           <Button size="sm" onClick={() => setIsAddingNew(true)} className="h-8 w-8 p-0">
             <PlusIcon size={16} />
           </Button>
@@ -386,173 +273,51 @@ export function KnowledgeSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        {/* Business Context Section */}
+        {/* Navigation Section */}
         <SidebarGroup>
-          <SidebarGroupLabel>Business Context</SidebarGroupLabel>
+          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
-            {isEditingContext ? (
-              <div className="p-2 space-y-3 border rounded-md bg-muted/50">
-                <div>
-                  <Label htmlFor="name" className="text-xs">
-                    Full Name
-                  </Label>
-                  <Input
-                    id="name"
-                    value={editingContext.name}
-                    onChange={(e) => handleContextChange("name", e.target.value)}
-                    className="h-8 text-xs"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="preferred_name" className="text-xs">
-                    Preferred Name
-                  </Label>
-                  <Input
-                    id="preferred_name"
-                    value={editingContext.preferred_name}
-                    onChange={(e) => handleContextChange("preferred_name", e.target.value)}
-                    className="h-8 text-xs"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="company_name" className="text-xs">
-                    Company Name
-                  </Label>
-                  <Input
-                    id="company_name"
-                    value={editingContext.company_name}
-                    onChange={(e) => handleContextChange("company_name", e.target.value)}
-                    className="h-8 text-xs"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="company_short" className="text-xs">
-                    Company Short Name
-                  </Label>
-                  <Input
-                    id="company_short"
-                    value={editingContext.company_short}
-                    onChange={(e) => handleContextChange("company_short", e.target.value)}
-                    className="h-8 text-xs"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="origin_country" className="text-xs">
-                    Origin Country
-                  </Label>
-                  <Input
-                    id="origin_country"
-                    value={editingContext.origin_country}
-                    onChange={(e) => handleContextChange("origin_country", e.target.value)}
-                    className="h-8 text-xs"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="countries_served" className="text-xs">
-                    Countries Served
-                  </Label>
-                  <Input
-                    id="countries_served"
-                    value={editingContext.countries_served}
-                    onChange={(e) => handleContextChange("countries_served", e.target.value)}
-                    className="h-8 text-xs"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="timezone" className="text-xs">
-                    Timezone
-                  </Label>
-                  <Input
-                    id="timezone"
-                    value={editingContext.timezone}
-                    onChange={(e) => handleContextChange("timezone", e.target.value)}
-                    className="h-8 text-xs"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="currency" className="text-xs">
-                    Currency
-                  </Label>
-                  <Input
-                    id="currency"
-                    value={editingContext.currency}
-                    onChange={(e) => handleContextChange("currency", e.target.value)}
-                    className="h-8 text-xs"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="annual_target" className="text-xs">
-                    Annual Target
-                  </Label>
-                  <Input
-                    id="annual_target"
-                    value={editingContext.annual_target}
-                    onChange={(e) => handleContextChange("annual_target", e.target.value)}
-                    className="h-8 text-xs"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="dataset_id" className="text-xs">
-                    Dataset ID
-                  </Label>
-                  <Input
-                    id="dataset_id"
-                    value={editingContext.dataset_id || ""}
-                    onChange={(e) => handleContextChange("dataset_id", e.target.value)}
-                    className="h-8 text-xs"
-                    placeholder="Optional connection identifier"
-                  />
-                </div>
-
-                <div className="flex gap-2 pt-2">
-                  <Button size="sm" onClick={handleSaveContext} className="flex-1">
-                    <CheckCirclFillIcon size={14} />
-                    Save
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={handleCancelContext} className="flex-1">
-                    <CrossIcon size={14} />
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="p-2 space-y-2 border rounded-md bg-muted/20">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-medium text-sm">{businessContext.preferred_name}</h4>
-                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={handleEditContext}>
-                    <PencilEditIcon size={12} />
-                  </Button>
-                </div>
-                <div className="text-xs text-muted-foreground space-y-1">
-                  <div>
-                    <strong>Company:</strong> {businessContext.company_name} ({businessContext.company_short})
-                  </div>
-                  <div>
-                    <strong>Location:</strong> {businessContext.origin_country}
-                  </div>
-                  <div>
-                    <strong>Target:</strong> {businessContext.annual_target}
-                  </div>
-                  <div>
-                    <strong>Timezone:</strong> {businessContext.timezone}
-                  </div>
-                  {businessContext.dataset_id && (
-                    <div>
-                      <strong>Dataset ID:</strong> {businessContext.dataset_id}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+            {/* Update the SidebarMenu in the Navigation Section to include Events */}
+            <SidebarMenu>
+              <SidebarMenuItem>
+              <SidebarMenuButton onClick={() => onNavigate("chat")} isActive={currentView === "chat"}>
+              <MessageCircle size={16} />
+                  <span>Chat</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => onNavigate("business-context")}
+                  isActive={currentView === "business-context"}
+                >
+                  <UserIcon />
+                  <span>Business Context</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => onNavigate("events")}
+                  isActive={currentView === "events" || currentView === "event-details"}
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="mr-2"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      clipRule="evenodd"
+                      d="M2 2.5C2 1.67157 2.67157 1 3.5 1H12.5C13.3284 1 14 1.67157 14 2.5V13.5C14 14.3284 13.3284 15 12.5 15H3.5C2.67157 15 2 14.3284 2 13.5V2.5ZM3.5 2.5H12.5V13.5H3.5V2.5ZM5 5.5C5 5.22386 5.22386 5 5.5 5H10.5C10.7761 5 11 5.22386 11 5.5C11 5.77614 10.7761 6 10.5 6H5.5C5.22386 6 5 5.77614 5 5.5ZM5 8.5C5 8.22386 5.22386 8 5.5 8H10.5C10.7761 8 11 8.22386 11 8.5C11 8.77614 10.7761 9 10.5 9H5.5C5.22386 9 5 8.77614 5 8.5ZM5 11.5C5 11.2239 5.22386 11 5.5 11H8.5C8.77614 11 9 11.2239 9 11.5C9 11.7761 8.77614 12 8.5 12H5.5C5.22386 12 5 11.7761 5 11.5Z"
+                      fill="currentColor"
+                    />
+                  </svg>
+                  <span>Data Dictionary</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 

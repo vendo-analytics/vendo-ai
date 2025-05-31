@@ -72,9 +72,9 @@ def execute_code_string(code_str: str) -> str:
 
 
 # --- Agent Execution ---
-async def run_agent(question: str, user_id: str) -> (str, str):
+async def run_agent(question: str, connection_id: str) -> (str, str):
     session_id = f"eval_{int(time.time())}"
-    session = session_service.create_session(app_name=APP_NAME, user_id=user_id, session_id=session_id)
+    session = session_service.create_session(app_name=APP_NAME, user_id=connection_id, session_id=session_id)
     runner = Runner(app_name=APP_NAME, agent=root_agent_x, session_service=session_service)
     request_queue = LiveRequestQueue()
 
@@ -134,7 +134,7 @@ async def run_agent(question: str, user_id: str) -> (str, str):
 
 
 # --- Evaluation ---
-async def evaluate_dataset(data: List[Dict[str, str]], user_id="eval_user"):
+async def evaluate_dataset(data: List[Dict[str, str]], connection_id="eval_user"):
     results = []
 
     langfuse_client.create_dataset(
@@ -160,7 +160,7 @@ async def evaluate_dataset(data: List[Dict[str, str]], user_id="eval_user"):
         print(f"Expected: {expected}", flush=True)
 
         try:
-            answer, trace_id = await run_agent(question, user_id)
+            answer, trace_id = await run_agent(question, connection_id)
             print(f"AnswerNEW: {answer}", flush=True)
             exact_match = expected.strip().lower() in  answer.strip().lower()
 

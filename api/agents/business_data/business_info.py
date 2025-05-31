@@ -25,7 +25,7 @@ FALLBACK_CLIENT_INFO: Dict[str, Any] = {
 }
 
 
-def get_info(user_id: str):
+def get_info(connection_id: str):
     """
     Get the client information dictionary from Firebase with fallback to hardcoded values.
     
@@ -36,17 +36,17 @@ def get_info(user_id: str):
         Dict[str, Any]: Client information including name, company, timezone, etc.
     """
     # Try to get from Firebase first
-    cached = get_business_context_from_state(user_id)
+    cached = get_business_context_from_state(connection_id)
     if cached:
         return cached
     
 
-    firestore_business_context = firestore_session_service.get_client_info_from_firebase(user_id)
+    firestore_business_context = firestore_session_service.get_business_context_from_firebase(connection_id)
     #firestore_business_context = None
     if firestore_business_context:
-        print(f"[DEBUG] Business context for {user_id}: {firestore_business_context}")
+        print(f"[DEBUG] Business context for {connection_id}: {firestore_business_context}")
     else:
-        print(f"[DEBUG] No business context found for {user_id}")
+        print(f"[DEBUG] No business context found for {connection_id}")
     if firestore_business_context:
         # Merge with fallback values to ensure all required fields are present
         merged_info = FALLBACK_CLIENT_INFO.copy()
@@ -55,14 +55,14 @@ def get_info(user_id: str):
         # Ensure current_date is always up to date
         merged_info["current_date"] = date.today().strftime("%Y-%m-%d")
         
-        print(f"[DEBUG] Using Firebase business_context for user {user_id}", flush=True)
+        print(f"[DEBUG] Using Firebase business_context for user {connection_id}", flush=True)
         return merged_info
     else:
         # Use fallback values
         fallback_info = FALLBACK_CLIENT_INFO.copy()
         fallback_info["current_date"] = date.today().strftime("%Y-%m-%d")
         
-        print(f"[DEBUG] Using fallback client_info for user {user_id}", flush=True)
+        print(f"[DEBUG] Using fallback client_info for user {connection_id}", flush=True)
         return fallback_info
 
 

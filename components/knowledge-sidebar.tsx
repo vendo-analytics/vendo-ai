@@ -17,12 +17,12 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { PlusIcon, PencilEditIcon, TrashIcon, CheckCirclFillIcon, CrossIcon, UserIcon } from "./icons"
 import { toast } from "sonner"
-import { MessageCircle } from "lucide-react"
+import { MessageCircle, FileText } from "lucide-react"
 
 // Firebase API functions - integrated with your backend
-const fetchFirebaseContent = async (userId = "001") => {
+const fetchFirebaseContent = async (connectionId = "001") => {
   try {
-    const response = await fetch(`/api/context/requirements?user_id=${userId}`)
+    const response = await fetch(`/api/general_context?connection_id=${connectionId}`)
     if (!response.ok) throw new Error("Failed to fetch")
     const data = await response.json()
 
@@ -43,7 +43,7 @@ const fetchFirebaseContent = async (userId = "001") => {
 
     // Transform content strings to match ContentItem interface
     return contentStrings.map((content: string, index: number) => ({
-      id: `${userId}_${index}`,
+      id: `${connectionId}_${index}`,
       content: content,
       embedding: [],
       index: index,
@@ -54,13 +54,13 @@ const fetchFirebaseContent = async (userId = "001") => {
   }
 }
 
-const addFirebaseContent = async (userId: string, content: string, messageType = "requirements") => {
+const addFirebaseContent = async (connectionId: string, content: string, messageType = "general_context") => {
   try {
     const response = await fetch("/api/context/add", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        user_id: userId,
+        connection_id: connectionId,
         content,
         message_type: messageType,
       }),
@@ -68,7 +68,7 @@ const addFirebaseContent = async (userId: string, content: string, messageType =
     if (!response.ok) throw new Error("Failed to add content")
 
     return {
-      id: `${userId}_${Date.now()}`,
+      id: `${connectionId}_${Date.now()}`,
       content,
       embedding: [],
       index: Date.now(),
@@ -81,17 +81,17 @@ const addFirebaseContent = async (userId: string, content: string, messageType =
 
 // Note: Update and delete operations are now implemented with index-based backend endpoints
 const updateFirebaseContent = async (
-  userId: string,
+  connectionId: string,
   index: number,
   newContent: string,
-  messageType = "requirements",
+  messageType = "general_context",
 ) => {
   try {
     const response = await fetch("/api/context/update", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        user_id: userId,
+        connection_id: connectionId,
         index: index,
         new_content: newContent,
         message_type: messageType,
@@ -110,13 +110,13 @@ const updateFirebaseContent = async (
   }
 }
 
-const deleteFirebaseContent = async (userId: string, index: number, messageType = "requirements") => {
+const deleteFirebaseContent = async (connectionId: string, index: number, messageType = "general_context") => {
   try {
     const response = await fetch("/api/context/delete", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        user_id: userId,
+        connection_id: connectionId,
         index: index,
         message_type: messageType,
       }),
@@ -141,10 +141,10 @@ interface ContentItem {
   index: number
 }
 
-// Update the KnowledgeSidebarProps interface to include events view
+// Update the KnowledgeSidebarProps interface to include annotations view
 interface KnowledgeSidebarProps {
-  onNavigate: (view: "chat" | "business-context" | "events" | "event-details") => void
-  currentView: "chat" | "business-context" | "events" | "event-details"
+  onNavigate: (view: "chat" | "business-context" | "events" | "event-details" | "annotations") => void
+  currentView: "chat" | "business-context" | "events" | "event-details" | "annotations"
   selectedEventId?: string
 }
 
@@ -277,11 +277,10 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId }: K
         <SidebarGroup>
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
-            {/* Update the SidebarMenu in the Navigation Section to include Events */}
             <SidebarMenu>
               <SidebarMenuItem>
-              <SidebarMenuButton onClick={() => onNavigate("chat")} isActive={currentView === "chat"}>
-              <MessageCircle size={16} />
+                <SidebarMenuButton onClick={() => onNavigate("chat")} isActive={currentView === "chat"}>
+                  <MessageCircle size={16} />
                   <span>Chat</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -299,14 +298,7 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId }: K
                   onClick={() => onNavigate("events")}
                   isActive={currentView === "events" || currentView === "event-details"}
                 >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="mr-2"
-                  >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path
                       fillRule="evenodd"
                       clipRule="evenodd"
@@ -314,7 +306,13 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId }: K
                       fill="currentColor"
                     />
                   </svg>
-                  <span>Data Dictionary</span>
+                  <span>Events</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton onClick={() => onNavigate("annotations")} isActive={currentView === "annotations"}>
+                  <FileText size={16} />
+                  <span>Annotations</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
@@ -323,7 +321,7 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId }: K
 
         {/* Content Items Section */}
         <SidebarGroup>
-          <SidebarGroupLabel>Documents({filteredContent.length})</SidebarGroupLabel>
+          <SidebarGroupLabel>Content Items ({filteredContent.length})</SidebarGroupLabel>
 
           <SidebarGroupContent>
             {/* Add New Item Form */}

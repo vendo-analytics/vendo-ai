@@ -12,6 +12,7 @@ import { MenuIcon } from "@/components/icons"
 import { useSidebar } from "@/components/ui/sidebar"
 import { EventsView } from "@/components/events-view"
 import { EventDetails } from "@/components/event-details"
+import { AnnotationsView } from "@/components/annotations-view"
 
 function CustomSidebarTrigger() {
   const { toggleSidebar } = useSidebar()
@@ -25,7 +26,9 @@ function CustomSidebarTrigger() {
 }
 
 export default function Page() {
-  const [currentView, setCurrentView] = useState<"chat" | "business-context" | "events" | "event-details">("chat")
+  const [currentView, setCurrentView] = useState<
+    "chat" | "business-context" | "events" | "event-details" | "annotations"
+  >("chat")
   const [selectedEvent, setSelectedEvent] = useState<any>(null)
 
   const getPageTitle = () => {
@@ -36,13 +39,15 @@ export default function Page() {
         return "Events"
       case "event-details":
         return "Event Details"
+      case "annotations":
+        return "Annotations"
       case "chat":
       default:
         return "AI Chat with Knowledge Base"
     }
   }
 
-  const handleNavigate = (view: "chat" | "business-context" | "events" | "event-details") => {
+  const handleNavigate = (view: "chat" | "business-context" | "events" | "event-details" | "annotations") => {
     setCurrentView(view)
     if (view !== "event-details") {
       setSelectedEvent(null)
@@ -71,6 +76,7 @@ export default function Page() {
           {currentView === "business-context" && <BusinessContextEditor />}
           {currentView === "events" && <EventsView onSelectEvent={handleSelectEvent} />}
           {currentView === "event-details" && selectedEvent && <EventDetails event={selectedEvent} />}
+          {currentView === "annotations" && <AnnotationsView />}
         </div>
       </SidebarInset>
     </>

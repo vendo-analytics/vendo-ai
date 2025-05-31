@@ -23,13 +23,13 @@ interface BusinessContext {
   dataset_id: string
 }
 
-const updateBusinessContext = async (userId: string, businessContext: BusinessContext) => {
+const updateBusinessContext = async (connectionId: string, businessContext: BusinessContext) => {
   try {
-    const response = await fetch("/api/context/business", {
+    const response = await fetch("/api/business-context", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        user_id: userId,
+        connection_id: connectionId,
         business_context: businessContext,
       }),
     })
@@ -41,9 +41,9 @@ const updateBusinessContext = async (userId: string, businessContext: BusinessCo
   }
 }
 
-const fetchBusinessContext = async (userId: string) => {
+const fetchBusinessContext = async (connectionId: string) => {
   try {
-    const response = await fetch(`/api/context/business?user_id=${userId}`)
+    const response = await fetch(`/api/business-context?connection_id=${connectionId}`)
     if (!response.ok) return null
     return await response.json()
   } catch (error) {
@@ -69,9 +69,10 @@ export function BusinessContextEditor() {
   })
   const [isEditing, setIsEditing] = useState(false)
   const [editingContext, setEditingContext] = useState<BusinessContext>(businessContext)
+  const connectionId = "001"
 
   useEffect(() => {
-    fetchBusinessContext("001").then((data) => {
+    fetchBusinessContext(connectionId).then((data) => {
       if (data) setBusinessContext(data)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps

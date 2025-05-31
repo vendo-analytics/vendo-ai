@@ -150,9 +150,9 @@ export function useADKWebSocket({
       return;
     }
 
-    const userId = "001"; // You can randomize or parametrize this
+    const connectionId = "001"; // You can randomize or parametrize this
     const sessionId = "001"; // You can randomize or parametrize this
-    const wsUrl = `ws://localhost:8000/ws/${sessionId}?user_id=${userId}`;
+    const wsUrl = `ws://localhost:8000/ws/${sessionId}?connection_id=${connectionId}`;
     
     console.log("[WS] Attempting to connect to:", wsUrl);
     

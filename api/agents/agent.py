@@ -48,17 +48,17 @@ def setup_before_agent_call(callback_context: CallbackContext):
 
     # Get user_id from session
     #user_id = getattr(callback_context.session, 'user_id', '001')
-    user_id = "001"
+    connection_id = "001"
     
     # Load client information into session state 
     
-    business_context = get_info(user_id)
+    business_context = get_info(connection_id)
     print(f"[DEBUG] Business context: {business_context}", flush=True)
     #business_context = None
     callback_context.state["business_context"] = business_context
-    callback_context.state["user_id"] = user_id
+    callback_context.state["connection_id"] = connection_id
     callback_context.state["dataset_id"] = business_context["dataset_id"]
-    print(f"[DEBUG] Loaded business context for user {user_id}", flush=True)
+    print(f"[DEBUG] Loaded business context for user {connection_id}", flush=True)
     
     user_table = f"gam-dwh.{business_context['dataset_id']}.engage"
     event_table = f"gam-dwh.{business_context['dataset_id']}.export"

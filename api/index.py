@@ -7,7 +7,7 @@ import numpy as np
 from pathlib import Path
 from datetime import date
 from dotenv import load_dotenv
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
 from sklearn.metrics.pairwise import cosine_similarity
 from opentelemetry import trace
@@ -26,6 +26,9 @@ from google.adk.sessions import InMemorySessionService
 from .firestore_instance import firestore_session_service
 from google.adk.agents.callback_context import CallbackContext
 from api.state_manager import update_business_context_in_state
+from google.cloud import bigquery
+from fastapi.responses import JSONResponse
+from api.mixpanel_client import MixpanelClient
 
 # Logging
 logging.basicConfig(level=logging.DEBUG)
@@ -67,10 +70,13 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True,
                    allow_methods=["*"], allow_headers=["*"])
 
 active_contexts = {}
+connection_id = "001"
+# Example: load from environment or hardcode for now
+mixpanel_client = MixpanelClient(connection_id)
 
-def get_context(user_id: str):
+def get_all_general_context_into_firebase(connection_id: str):
     try:
-        messages = firestore_session_service.get_all_messages(user_id)
+        messages = firestore_session_service.get_all_general_context(connection_id)
         if not messages:
             return []
         contents = [msg["content"] for msg in messages if msg.get("content")]
@@ -79,10 +85,10 @@ def get_context(user_id: str):
         logger.error(f"[context] Error: {e}")
         return []
 
-def get_top_k_context(user_query: str, user_id: str, k=3, min_similarity=0.0):
+def get_top_k_context(user_query: str, connection_id: str, k=3, min_similarity=0.0):
     try:
         query_vec = np.array(embed_text(user_query)).reshape(1, -1)
-        messages = session_service.get_all_messages(user_id)
+        messages = firestore_session_service.get_all_general_context(connection_id)
         if not messages:
             return []
         scored = []
@@ -100,14 +106,18 @@ def get_top_k_context(user_query: str, user_id: str, k=3, min_similarity=0.0):
         return []
 
 @app.websocket("/ws/{session_id}")
-async def websocket_endpoint(websocket: WebSocket, session_id: int, user_id: str = Query(...)):
+async def websocket_endpoint(websocket: WebSocket, session_id: int, connection_id: str = Query(...)):
     await websocket.accept()
-    print(f"[CONNECTED] #{session_id} User: {user_id}")
+    print(f"[CONNECTED] #{session_id} User: {connection_id}")
 
     #session = session_service.create_session(APP_NAME, user_id, str(session_id))
-    session = session_service.create_session(app_name=APP_NAME, user_id=user_id, session_id=str(session_id))
+    session = session_service.create_session(app_name=APP_NAME, user_id=connection_id, session_id=str(session_id))
     runner = Runner(app_name=APP_NAME, agent=root_agent, session_service=session_service)
     run_config = RunConfig(response_modalities=["text"])
+    organization_id = firestore_session_service.get_connection_info(connection_id).get("organization_id")
+    source_id = firestore_session_service.get_connection_info(connection_id).get("source_id")
+    mixpanel_details = firestore_session_service.get_mixpanel_details(organization_id, source_id)
+    print(f"[DEBUG] Organization ID: {organization_id}", flush=True)
 
     try:
         while True:
@@ -123,16 +133,17 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, user_id: str
                 
                 #session_service.append_message(str(user_id), "user", content)
 
-                context = get_context(user_id)
+                context = get_all_general_context_into_firebase (connection_id)
                 
 
                 full_input = "\n\n".join(context + [content])
                 content_obj = Content(role="user", parts=[Part.from_text(text=full_input)])
 
-                result = runner.run_async(session_id=str(session_id), user_id=user_id, new_message=content_obj)
+                result = runner.run_async(session_id=str(session_id), user_id=connection_id, new_message=content_obj)
                 
                 span.set_attribute("input", full_input)
-                span.set_attribute("user_id", user_id)
+                span.set_attribute("user_id", connection_id)
+                span.set_attribute("organization_id", organization_id)
                 span.set_attribute("message_type", "user")
                 input_token_count = len(full_input) // 4
                 span.set_attribute("gen_ai.usage.prompt_tokens", input_token_count)
@@ -160,7 +171,8 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, user_id: str
                         if event.content and event.content.parts:
                             result_text = event.content.parts[0].text
                             span.set_attribute("output", result_text)
-                            span.set_attribute("user_id", user_id)
+                            span.set_attribute("user_id", connection_id)
+                            span.set_attribute("organization_id", organization_id)
                             span.set_attribute("message_type", "assistant")
                             output_token_count = len(result_text) // 4
                             span.set_attribute("gen_ai.usage.completion_tokens", output_token_count)
@@ -188,40 +200,40 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, user_id: str
         }))
 
 @app.get("/api/chat/history")
-async def get_chat_history(user_id: str = Query(...)):
+async def get_chat_history(connection_id: str = Query(...)):
     try:
-        messages = session_service.get_messages(str(user_id))
+        messages = session_service.get_messages(connection_id)
         return messages
     except Exception as e:
         logger.error(f"[GET /chat/history] {e}")
         return {"error": str(e)}, 500
 
 
-@app.get("/api/context/requirements")
-async def get_all_requirements(user_id: str = Query(...)):
+@app.get("/api/general_context")
+async def get_all_general_context(connection_id: str = Query(...)):
     try:
-        mixpanel_dataset_id = firestore_session_service.get_user_mixpanel_dataset_id(str(user_id))
+        mixpanel_dataset_id = firestore_session_service.get_mixpanel_dataset_id(connection_id)
         if mixpanel_dataset_id:
-            print(f"[INFO] Mixpanel Dataset ID for {user_id}: {mixpanel_dataset_id}")
-        messages = firestore_session_service.get_all_requirements(str(user_id), message_type="requirements")
+            print(f"[INFO] Mixpanel Dataset ID for {connection_id}: {mixpanel_dataset_id}")
+        messages = firestore_session_service.get_all_general_context(str(connection_id), message_type="general_context")
         return messages or []
     except Exception as e:
-        logger.error(f"[GET /context/requirements] {e}")
+        logger.error(f"[GET /context/general_context] {e}")
         return {"error": str(e)}, 500
 
 
-@app.post("/api/context/add")
-async def add_knowledge_requirement(request: dict):
+@app.post("/api/general_context/add")
+async def add_general_context(request: dict):
     try:
-        user_id = request.get("user_id")
+        connection_id = request.get("connection_id")
         content = request.get("content")
-        message_type = request.get("message_type", "requirements")
+        message_type = request.get("message_type", "general_context")
 
-        if not user_id or not content:
-            return {"error": "user_id and content are required"}, 400
+        if not connection_id or not content:
+            return {"error": "connection_id and content are required"}, 400
 
         firestore_session_service.append_message(
-            str(user_id),
+            str(connection_id),
             "user",
             content,
             message_type=message_type,
@@ -229,23 +241,23 @@ async def add_knowledge_requirement(request: dict):
         )
         return {"success": True, "message": "Content added successfully"}
     except Exception as e:
-        logger.error(f"[POST /context/add] {e}")
+        logger.error(f"[POST /general_context/add] {e}")
         return {"error": str(e)}, 500
 
 
-@app.put("/api/context/update")
-async def update_knowledge_requirement(request: dict):
+@app.put("/api/general_context/update")
+async def update_general_context(request: dict):
     try:
-        user_id = request.get("user_id")
+        connection_id = request.get("connection_id")
         index = request.get("index")
         new_content = request.get("new_content")
-        message_type = request.get("message_type", "requirements")
+        message_type = request.get("message_type", "general_context")
 
-        if not user_id or index is None or not new_content:
-            return {"error": "user_id, index, and new_content are required"}, 400
+        if not connection_id or index is None or not new_content:
+            return {"error": "connection_id, index, and new_content are required"}, 400
 
         success = firestore_session_service.update_requirement_by_index(
-            str(user_id),
+            connection_id,
             int(index),
             new_content,
             message_type=message_type
@@ -256,22 +268,22 @@ async def update_knowledge_requirement(request: dict):
             return {"error": "Invalid index or update failed"}, 404
 
     except Exception as e:
-        logger.error(f"[PUT /context/update] {e}")
+        logger.error(f"[PUT /general_context/update] {e}")
         return {"error": str(e)}, 500
 
 
-@app.delete("/api/context/delete")
-async def delete_knowledge_requirement(request: dict):
+@app.delete("/api/general_context/delete")
+async def delete_general_context(request: dict):
     try:
-        user_id = request.get("user_id")
+        connection_id = request.get("connection_id")
         index = request.get("index")
-        message_type = request.get("message_type", "requirements")
+        message_type = request.get("message_type", "general_context")
 
-        if not user_id or index is None:
-            return {"error": "user_id and index are required"}, 400
+        if not connection_id or index is None:
+            return {"error": "connection_id and index are required"}, 400
 
-        success = firestore_session_service.delete_requirement_by_index(
-            str(user_id),
+        success = firestore_session_service.delete_general_context_by_index(
+            connection_id,
             int(index),
             message_type=message_type
         )
@@ -281,45 +293,126 @@ async def delete_knowledge_requirement(request: dict):
             return {"error": "Invalid index or delete failed"}, 404
 
     except Exception as e:
-        logger.error(f"[DELETE /context/delete] {e}")
+        logger.error(f"[DELETE /general_context/delete] {e}")
         return {"error": str(e)}, 500
 
 
-@app.get("/api/context/business")
-async def get_business_context(user_id: str = Query(...)):
+@app.get("/api/business-context")
+async def get_business_context(connection_id: str = Query(...)):
     try:
         
-        business_context = firestore_session_service.get_client_info_from_firebase(str(user_id))
+        business_context = firestore_session_service.get_business_context_from_firebase(connection_id)
         if business_context:
             return business_context
         else:
             return {"error": "Business context not found"}, 404
     except Exception as e:
-        logger.error(f"[GET /context/business] {e}")
+        logger.error(f"[GET /business_context] {e}")
         return {"error": str(e)}, 500
 
 
-@app.put("/api/context/business")
+@app.put("/api/business-context")
 async def update_business_context(request: dict):
     try:
-        user_id = request.get("user_id")
+        connection_id = request.get("connection_id")
         business_context = request.get("business_context")
         print(f"[DEBUG1] Business context: {business_context}", flush=True)
 
-        if not user_id or not business_context:
-            return {"error": "user_id and business_context are required"}, 400
+        if not connection_id or not business_context:
+            return {"error": "connection_id and business_context are required"}, 400
 
         # Update business context in Firebase
-        firestore_session_service.collection.document(str(user_id)).set({
+        firestore_session_service.collection.document(connection_id).set({
             "business_context": business_context
         }, merge=True)
 
-        update_business_context_in_state(user_id, business_context)
-        
+        update_business_context_in_state(connection_id, business_context)
         
         return {"success": True, "message": "Business context updated successfully"}
     except Exception as e:
-        logger.error(f"[PUT /context/business] {e}")
+        logger.error(f"[PUT /business_context] {e}")
         return {"error": str(e)}, 500
+
+@app.get("/api/events-data")
+async def get_events_data(connection_id: str = "001"):
+    client = bigquery.Client()
+    dataset_id = firestore_session_service.get_mixpanel_dataset_id(connection_id)
+    query = f"""
+        SELECT id, name, description, source, status, count, change
+        FROM `{dataset_id}.events_data`
+    """
+    results = client.query(query).result()
+    events = []
+    for row in results:
+        events.append({
+            "id": row.id,
+            "name": row.name,
+            "description": row.description,
+            "source": row.source,
+            "status": row.status,
+            "count": row.count,
+            "change": row.change,
+        })
+    print(f"[DEBUG] Events: {events}", flush=True)
+    return events
+
+@app.get("/api/event-details")
+async def get_event_details(connection_id: str = "001"):
+    client = bigquery.Client()
+    dataset_id = firestore_session_service.get_mixpanel_dataset_id(connection_id)
+    query = f"""
+        SELECT event, name, type, description
+        FROM `{dataset_id}.event_details`
+    """
+    results = client.query(query).result()
+    properties = []
+    for row in results:
+        properties.append({
+            "event": row.event,
+            "name": row.name,
+            "type": row.type,
+            "description": row.description,
+        })
+    print(f"[DEBUG] Properties: {properties}", flush=True)
+    return properties
+
+@app.get("/api/annotations")
+async def get_annotations():
+    
+    # Call your Mixpanel annotations fetcher
+    df = mixpanel_client.get_mixpanel_annotations_data()
+    records = df.to_dict(orient="records")
+    annotations = [
+        {
+            "id": str(row.get("id", "")),
+            "date": row.get("date", ""),
+            "description": row.get("description", ""),
+            "user": f"{row.get('user_first_name', '')} {row.get('user_last_name', '')}".strip(),
+        }
+        for row in records
+    ]
+    print(f"[DEBUG] Annotations: {annotations}", flush=True)
+    return JSONResponse(content=annotations)
+
+@app.patch("/api/annotations/{annotation_id}")
+async def patch_annotation(annotation_id: str, data: dict = Body(...), connection_id: str = "001"):
+    client = MixpanelClient(connection_id)
+    result = client.update_annotation(annotation_id, data)
+    return result
+
+@app.delete("/api/annotations/{annotation_id}")
+async def delete_annotation(annotation_id: str, connection_id: str = "001"):
+    client = MixpanelClient(connection_id)
+    result = client.delete_annotation(annotation_id)
+    return result
+
+@app.post("/api/annotations")
+async def create_annotation(data: dict = Body(...), connection_id: str = "001"):
+
+    client = MixpanelClient(connection_id)
+    description = data.get("description")
+    date = data.get("date")
+    result = client.create_annotation(description, date)
+    return result
 
 

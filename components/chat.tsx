@@ -6,6 +6,7 @@ import { MultimodalInput } from "@/components/multimodal-input"
 import { Overview } from "@/components/overview"
 import { useScrollToBottom } from "@/hooks/use-scroll-to-bottom"
 import { useADKWebSocket } from "@/hooks/useADKWebSocket"
+import { useMessageRatings } from "@/hooks/useMessageRatings"
 import type { Message, CreateMessage, ChatRequestOptions } from "ai"
 import { toast } from "sonner"
 import { AudioToggle } from "./AudioToggle"
@@ -17,6 +18,9 @@ export function Chat() {
   const [input, setInput] = useState<string>("")
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [isAudioEnabled, setIsAudioEnabled] = useState(false)
+
+  // Add ratings hook
+  const { toggleRating, getRating } = useMessageRatings()
 
   const append = async (message: Message | CreateMessage, chatRequestOptions?: ChatRequestOptions): Promise<string> => {
     setMessages((prev) => [...prev, message as Message])
@@ -184,6 +188,8 @@ export function Chat() {
             chatId={chatId}
             message={message}
             isLoading={isLoading && messages.length - 1 === index}
+            onRating={toggleRating}
+            currentRating={getRating(message.id)}
           />
         ))}
 
@@ -191,7 +197,7 @@ export function Chat() {
 
         {/* Spacer to account for fixed input */}
         <div className="h-32" />
-        
+
         {/* Scroll target - positioned at the very bottom */}
         <div ref={messagesEndRef} className="shrink-0 w-full h-1" />
       </div>

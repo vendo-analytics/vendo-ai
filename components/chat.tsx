@@ -32,7 +32,7 @@ export function Chat() {
   }
 
   const { sendUserMessage, startListening, stopListening, isConnected, isRecording, stopTTS } = useADKWebSocket({
-    onTextMessage: (chunk: string, isFinal = false, isPartial = false, role?: "user" | "assistant") => {
+    onTextMessage: (chunk: string, isFinal = false, isPartial = false, role?: "user" | "assistant", traceId?: string) => {
       setMessages((prev) => {
         if (!chunk) return prev
         const last = prev[prev.length - 1]
@@ -55,7 +55,7 @@ export function Chat() {
         } else if (role === "assistant") {
           if (last?.role === "assistant") {
             // Update the last assistant message
-            return [...prev.slice(0, -1), { ...last, content: chunk }]
+            return [...prev.slice(0, -1), { ...last, content: chunk, traceId }]
           } else {
             // Always append a new assistant message if last is not an assistant
             return [
@@ -64,6 +64,7 @@ export function Chat() {
                 id: `assistant-${Date.now()}`,
                 role: "assistant",
                 content: chunk,
+                traceId,
               },
             ]
           }

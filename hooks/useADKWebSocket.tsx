@@ -55,7 +55,13 @@ declare global {
 }
 
 interface Props {
-  onTextMessage: (textChunk: string, isFinal?: boolean, isPartial?: boolean, role?: "user" | "assistant") => void;
+  onTextMessage: (
+    textChunk: string,
+    isFinal?: boolean,
+    isPartial?: boolean,
+    role?: "user" | "assistant",
+    traceId?: string
+  ) => void;
   onAudioMessage?: (audioBuffer: ArrayBuffer) => void;
   onTurnComplete?: () => void;
   isAudioEnabled?: boolean;
@@ -184,7 +190,13 @@ export function useADKWebSocket({
             // Stop any ongoing TTS when receiving a new message
             stopTTS();
             
-            onTextMessage(data.data, data.turn_complete, data.is_partial, "assistant");
+            onTextMessage(
+              data.data,
+              data.turn_complete,
+              data.is_partial,
+              "assistant",
+              data.traceId
+            );
             
             // Only add complete messages to history
             if (data.turn_complete && !data.is_partial) {

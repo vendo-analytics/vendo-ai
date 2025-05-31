@@ -7,7 +7,7 @@ import numpy as np
 from pathlib import Path
 from datetime import date
 from dotenv import load_dotenv
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, Body
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, Body, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sklearn.metrics.pairwise import cosine_similarity
 from opentelemetry import trace
@@ -29,6 +29,7 @@ from api.state_manager import update_business_context_in_state
 from google.cloud import bigquery
 from fastapi.responses import JSONResponse
 from api.mixpanel_client import MixpanelClient
+from langfuse import Langfuse
 
 # Logging
 logging.basicConfig(level=logging.DEBUG)
@@ -41,9 +42,7 @@ load_dotenv()
 APP_NAME = "ADK Non-Streaming"
 session_service = InMemorySessionService()
 # Tracing setup
-LANGFUSE_AUTH = base64.b64encode(
-    f"{os.getenv('LANGFUSE_PUBLIC_KEY')}:{os.getenv('LANGFUSE_SECRET_KEY')}".encode()
-).decode()
+
 
 OTEL_ENDPOINT = "https://us.cloud.langfuse.com/api/public/otel/v1/traces"
 OTEL_HEADERS = { "Authorization": f"Basic {LANGFUSE_AUTH}" }
@@ -73,6 +72,8 @@ active_contexts = {}
 connection_id = "001"
 # Example: load from environment or hardcode for now
 mixpanel_client = MixpanelClient(connection_id)
+
+langfuse = Langfuse(public_key=os.getenv("LANGFUSE_PUBLIC_KEY"), secret_key=os.getenv("LANGFUSE_SECRET_KEY"))
 
 def get_all_general_context_into_firebase(connection_id: str):
     try:
@@ -179,12 +180,23 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, connection_i
                             span.set_attribute("gen_ai.usage.total_tokens", output_token_count)
                             span.set_attribute("gen_ai.response.model", "gemini-2.0-flash")
                             print(f"[DEBUG] {result_text}", flush=True)
-                        
+
+                            # Create Langfuse trace for this assistant message
+                            trace = langfuse.trace(
+                                name="assistant_message",
+                                user_id=connection_id,
+                                metadata={
+                                    "session_id": str(session_id),
+                                    "organization_id": organization_id,
+                                },
+                            )
+                            trace_id = trace.id
 
                 #session_service.append_message(str(user_id), "assistant", result_text)
                 await websocket.send_text(json.dumps({
                     "mime_type": "text/plain",
                     "data": result_text,
+                    "traceId": trace_id if 'trace_id' in locals() else None,
                     "turn_complete": True,
                     "is_speech": True
                 }))
@@ -414,5 +426,24 @@ async def create_annotation(data: dict = Body(...), connection_id: str = "001"):
     date = data.get("date")
     result = client.create_annotation(description, date)
     return result
+
+@app.post("/api/feedback")
+async def post_feedback(request: Request):
+    data = await request.json()
+    trace_id = data.get("traceId")
+    value = data.get("value")  # 1 for up, 0 for down
+
+    if not trace_id or value is None:
+        return {"success": False, "error": "Missing traceId or value"}
+
+    try:
+        langfuse.score(
+            trace_id=trace_id,
+            name="user_feedback",
+            value=value,
+        )
+        return {"success": True}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 

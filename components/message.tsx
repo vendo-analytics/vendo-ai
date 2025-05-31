@@ -1,6 +1,6 @@
 "use client"
 
-import type { Message } from "ai"
+import type { Message as AIMessage } from "ai"
 import { motion } from "framer-motion"
 import { SparklesIcon } from "./icons"
 import { ThumbsUpIcon, ThumbsDownIcon } from "./rating-icons"
@@ -21,6 +21,8 @@ const isChartContent = (content: string): boolean => {
   )
 }
 
+type Message = AIMessage & { traceId?: string }
+
 interface PreviewMessageProps {
   chatId: string
   message: Message
@@ -30,10 +32,25 @@ interface PreviewMessageProps {
 }
 
 export const PreviewMessage = ({ message, onRating, currentRating }: PreviewMessageProps) => {
-  const handleRating = (newRating: "up" | "down") => {
+  const handleRating = async (newRating: "up" | "down") => {
     if (onRating) {
       const result = onRating(message.id, newRating)
       console.log(`Message ${message.id} rated:`, result)
+    }
+    // Send feedback to backend if traceId exists
+    if (message.traceId) {
+      try {
+        await fetch("/api/feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            traceId: message.traceId,
+            value: newRating === "up" ? 1 : 0,
+          }),
+        })
+      } catch (err) {
+        console.error("Failed to send feedback to backend:", err)
+      }
     }
   }
 
@@ -110,7 +127,7 @@ export const PreviewMessage = ({ message, onRating, currentRating }: PreviewMess
           {message.role === "assistant" && message.content && onRating && (
             <div className="flex items-center gap-2 mt-2 opacity-0 group-hover/message:opacity-100 transition-opacity">
               <button
-                onClick={() => handleRating("up")}
+                onClick={async () => await handleRating("up")}
                 className={cn(
                   "p-1.5 rounded-md hover:bg-muted transition-colors",
                   currentRating === "up"
@@ -122,7 +139,7 @@ export const PreviewMessage = ({ message, onRating, currentRating }: PreviewMess
                 <ThumbsUpIcon size={14} />
               </button>
               <button
-                onClick={() => handleRating("down")}
+                onClick={async () => await handleRating("down")}
                 className={cn(
                   "p-1.5 rounded-md hover:bg-muted transition-colors",
                   currentRating === "down" ? "bg-red-100 text-red-600" : "text-muted-foreground hover:text-foreground",

@@ -7,6 +7,7 @@ def build_chart(
     y: List[float], 
     title: Optional[str] = None, 
     chart_type: str = "line"
+    
 ) -> str:
     """
     Generates JSX code for a Recharts chart using provided x/y values.

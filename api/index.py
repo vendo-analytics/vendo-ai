@@ -112,6 +112,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, connection_i
     await websocket.accept()
     print(f"[CONNECTED] #{session_id} User: {connection_id}")
 
+
     #session = session_service.create_session(APP_NAME, user_id, str(session_id))
     session = session_service.create_session(app_name=APP_NAME, user_id=connection_id, session_id=str(session_id))
     runner = Runner(app_name=APP_NAME, agent=root_agent, session_service=session_service)
@@ -132,6 +133,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, connection_i
                 continue
                    
             with tracer.start_as_current_span("user_message") as span:
+                
                 
                 #session_service.append_message(str(user_id), "user", content)
 
@@ -183,15 +185,16 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, connection_i
                             print(f"[DEBUG] {result_text}", flush=True)
 
                             # Create Langfuse trace for this assistant message
-                            trace = langfuse.trace(
-                                name="assistant_message",
-                                user_id=connection_id,
-                                metadata={
-                                    "session_id": str(session_id),
-                                    "organization_id": organization_id,
-                                },
-                            )
-                            trace_id = trace.id
+                            # trace = langfuse.trace(
+                            #     name="assistant_message",
+                            #     user_id=connection_id,
+                            #     metadata={
+                            #         "session_id": str(session_id),
+                            #         "organization_id": organization_id,
+                            #     },
+                            # )
+                            trace_id = format(span.get_span_context().trace_id, '032x')
+                            print(f"Trace ID: {trace_id}")
 
                 #session_service.append_message(str(user_id), "assistant", result_text)
                 await websocket.send_text(json.dumps({

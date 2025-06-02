@@ -42,8 +42,9 @@ load_dotenv()
 APP_NAME = "ADK Non-Streaming"
 session_service = InMemorySessionService()
 # Tracing setup
-
-
+LANGFUSE_AUTH = base64.b64encode(
+    f"{os.getenv('LANGFUSE_PUBLIC_KEY')}:{os.getenv('LANGFUSE_SECRET_KEY')}".encode()
+).decode()
 OTEL_ENDPOINT = "https://us.cloud.langfuse.com/api/public/otel/v1/traces"
 OTEL_HEADERS = { "Authorization": f"Basic {LANGFUSE_AUTH}" }
 

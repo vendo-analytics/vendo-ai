@@ -4,7 +4,7 @@ from typing import Union, List, Optional, Iterable
 
 from google.adk.agents import Agent
 from .prompt import (
-    ANALYST_INSTRUCTION
+    analyst_prompt
 )
 
 from .tools import (
@@ -23,12 +23,14 @@ from .tools import (
 from dotenv import load_dotenv
 load_dotenv()
 
+debug = os.getenv("DEBUG_MODE", "false").lower() == "true"
+
 # Data Analyst Agent - Analyzes data and provides insights, recommendations, and visualizations
 analyst_agent = Agent(
     name="analyst_agent",
     model=os.getenv("MODEL_GEMINI"),
     description="Analyzes datasets, provides insights, generates visualizations, and suggests advanced analyses",
-    instruction=ANALYST_INSTRUCTION,
+    instruction=analyst_prompt(debug),
     tools=[
         query_bigquery,
         build_chart,

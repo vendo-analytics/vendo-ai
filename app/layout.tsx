@@ -4,6 +4,7 @@ import { Inter } from 'next/font/google'
 import "./globals.css"
 import { Toaster } from "sonner"
 import { SidebarProvider } from "@/components/ui/sidebar"
+import { ConnectionProvider } from "@/lib/connection-context"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -20,10 +21,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <SidebarProvider>          {/* ✅ Already wrapping children */}
-          {children}
-          <Toaster position="top-center" />
-        </SidebarProvider>
+        <ConnectionProvider>
+          <SidebarProvider>
+            {children}
+            <Toaster position="top-center" />
+          </SidebarProvider>
+        </ConnectionProvider>
       </body>
     </html>
   )

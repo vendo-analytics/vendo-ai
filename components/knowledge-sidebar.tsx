@@ -18,11 +18,13 @@ import { Textarea } from "@/components/ui/textarea"
 import { PlusIcon, PencilEditIcon, TrashIcon, CheckCirclFillIcon, CrossIcon, UserIcon } from "./icons"
 import { toast } from "sonner"
 import { MessageCircle, FileText } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useConnection } from "@/lib/connection-context"
 
 // Firebase API functions - integrated with your backend
 const fetchFirebaseContent = async (connectionId = "001") => {
   try {
-    const response = await fetch(`/api/general_context?connection_id=${connectionId}`)
+    const response = await fetch(`/api/general-context?connection_id=${connectionId}`)
     if (!response.ok) throw new Error("Failed to fetch")
     const data = await response.json()
 
@@ -56,7 +58,7 @@ const fetchFirebaseContent = async (connectionId = "001") => {
 
 const addFirebaseContent = async (connectionId: string, content: string, messageType = "general_context") => {
   try {
-    const response = await fetch("/api/context/add", {
+    const response = await fetch("/api/general-context/add", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -87,7 +89,7 @@ const updateFirebaseContent = async (
   messageType = "general_context",
 ) => {
   try {
-    const response = await fetch("/api/context/update", {
+    const response = await fetch("/api/general-context/update", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -112,7 +114,7 @@ const updateFirebaseContent = async (
 
 const deleteFirebaseContent = async (connectionId: string, index: number, messageType = "general_context") => {
   try {
-    const response = await fetch("/api/context/delete", {
+    const response = await fetch("/api/general-context/delete", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -157,12 +159,16 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId }: K
   const [searchQuery, setSearchQuery] = useState("")
   const [isLoading, setIsLoading] = useState(true)
 
-  // Fetch content on component mount
+  // Use the global connection context
+  const { selectedConnectionId, setSelectedConnectionId, companies } = useConnection()
+
+  // Fetch content on component mount or when connection changes
   useEffect(() => {
     const loadContent = async () => {
       try {
-        console.log("Loading content...")
-        const items = await fetchFirebaseContent()
+        setIsLoading(true)
+        console.log("Loading content for connection:", selectedConnectionId)
+        const items = await fetchFirebaseContent(selectedConnectionId)
         console.log("Loaded items:", items)
         setContentItems(items)
       } catch (error) {
@@ -173,7 +179,7 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId }: K
       }
     }
     loadContent()
-  }, [])
+  }, [selectedConnectionId])
 
   // Filter content based on search query
   const filteredContent = contentItems.filter((item) => {
@@ -191,17 +197,20 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId }: K
   }
 
   const handleSaveEdit = async () => {
-    if (!editingId || !editingContent.trim()) return
-
-    // Find the original content
-    const originalItem = contentItems.find((item) => item.id === editingId)
-    if (!originalItem) return
+    if (!editingId) return
 
     try {
-      await updateFirebaseContent("001", originalItem.index, editingContent)
-      setContentItems((prev) =>
-        prev.map((item) => (item.id === editingId ? { ...item, content: editingContent } : item)),
-      )
+      // Find the item by id to get its index
+      const item = contentItems.find((item) => item.id === editingId)
+      if (!item) {
+        toast.error("Item not found")
+        return
+      }
+
+      await updateFirebaseContent(selectedConnectionId, item.index, editingContent)
+      // Refresh the entire list to get updated content
+      const updatedItems = await fetchFirebaseContent(selectedConnectionId)
+      setContentItems(updatedItems)
       setEditingId(null)
       setEditingContent("")
       toast.success("Content updated successfully")
@@ -217,16 +226,17 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId }: K
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this item?")) return
-
-    // Find the item to get its index
-    const itemToDelete = contentItems.find((item) => item.id === id)
-    if (!itemToDelete) return
-
     try {
-      await deleteFirebaseContent("001", itemToDelete.index)
-      // Refresh the entire list since indices change after deletion
-      const updatedItems = await fetchFirebaseContent("001")
+      // Find the item by id to get its index
+      const item = contentItems.find((item) => item.id === id)
+      if (!item) {
+        toast.error("Item not found")
+        return
+      }
+
+      await deleteFirebaseContent(selectedConnectionId, item.index)
+      // Refresh the entire list to get updated indices
+      const updatedItems = await fetchFirebaseContent(selectedConnectionId)
       setContentItems(updatedItems)
       toast.success("Content deleted successfully")
     } catch (error) {
@@ -239,9 +249,9 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId }: K
     if (!newContent.trim()) return
 
     try {
-      await addFirebaseContent("001", newContent)
+      await addFirebaseContent(selectedConnectionId, newContent)
       // Refresh the entire list to get proper indices
-      const updatedItems = await fetchFirebaseContent("001")
+      const updatedItems = await fetchFirebaseContent(selectedConnectionId)
       setContentItems(updatedItems)
       setNewContent("")
       setIsAddingNew(false)
@@ -256,19 +266,21 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId }: K
     <Sidebar>
       <SidebarHeader>
         <div className="flex items-center justify-between p-2">
-          <h2 className="text-lg font-semibold">Knowledge Base</h2>
-          <Button size="sm" onClick={() => setIsAddingNew(true)} className="h-8 w-8 p-0">
-            <PlusIcon size={16} />
-          </Button>
-        </div>
+          <h2 className="text-lg font-semibold">VendoAI</h2>
 
-        {/* Search Input */}
-        <div className="p-2">
-          <SidebarInput
-            placeholder="Search content..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+          {/* Connection Selector Dropdown */}
+          <Select value={selectedConnectionId} onValueChange={setSelectedConnectionId}>
+            <SelectTrigger className="w-[180px] h-8">
+              <SelectValue placeholder="Select connection" />
+            </SelectTrigger>
+            <SelectContent>
+              {companies.map((company) => (
+                <SelectItem key={company.id} value={company.id}>
+                  {company.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </SidebarHeader>
 
@@ -321,7 +333,22 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId }: K
 
         {/* Content Items Section */}
         <SidebarGroup>
-          <SidebarGroupLabel>Content Items ({filteredContent.length})</SidebarGroupLabel>
+          <div className="flex items-center justify-between px-2">
+            <SidebarGroupLabel className="py-0">Content Items ({filteredContent.length})</SidebarGroupLabel>
+            <Button size="sm" onClick={() => setIsAddingNew(true)} className="h-7 w-7 p-0">
+              <PlusIcon size={14} />
+            </Button>
+          </div>
+
+          {/* Search Input - Moved closer to content items */}
+          <div className="px-2 py-2">
+            <SidebarInput
+              placeholder="Search content..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-8"
+            />
+          </div>
 
           <SidebarGroupContent>
             {/* Add New Item Form */}

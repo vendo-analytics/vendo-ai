@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useConnectionId } from "@/lib/connection-context";
 
 // Add Web Speech API type definitions
 interface SpeechRecognitionEvent extends Event {
@@ -75,12 +76,11 @@ interface Message {
 
 // Helper to safely encode large Uint8Arrays to base64
 function uint8ToBase64(uint8: Uint8Array) {
-  let result = '';
-  const CHUNK_SIZE = 0x4000; // 16k
-  for (let i = 0; i < uint8.length; i += CHUNK_SIZE) {
-    result += String.fromCharCode.apply(null, uint8.subarray(i, i + CHUNK_SIZE) as any);
+  let binary = "";
+  for (let i = 0; i < uint8.length; i++) {
+    binary += String.fromCharCode(uint8[i]);
   }
-  return btoa(result);
+  return btoa(binary);
 }
 
 export function useADKWebSocket({
@@ -95,10 +95,10 @@ export function useADKWebSocket({
   const [isProcessing, setIsProcessing] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const currentUtterance = useRef<HTMLAudioElement | null>(null);
-  const reconnectTimeout = useRef<NodeJS.Timeout>();
+  const reconnectTimeout = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttempts = useRef(0);
   const MAX_RECONNECT_ATTEMPTS = 5;
-  const RECONNECT_DELAY = 1000; // 1 second
+  const RECONNECT_DELAY = 2000; // 2 seconds
   const audioContext = useRef<AudioContext | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -116,7 +116,10 @@ export function useADKWebSocket({
   const interimTranscriptRef = useRef<string>("");
   const assistantBufferRef = useRef<string>("");
 
-  // Store callbacks in refs to prevent unnecessary reconnections
+  // Get the selected connection ID from global context
+  const connectionId = useConnectionId();
+  
+  // Update callbacksRef to use current props
   const callbacksRef = useRef({
     onTextMessage,
     onAudioMessage,
@@ -125,7 +128,7 @@ export function useADKWebSocket({
     setIsAudioEnabled,
   });
 
-  // Update callbacks without triggering reconnection
+  // Keep callbacks updated
   useEffect(() => {
     callbacksRef.current = {
       onTextMessage,
@@ -134,19 +137,14 @@ export function useADKWebSocket({
       isAudioEnabled,
       setIsAudioEnabled,
     };
-    console.log("[WS] Audio state updated:", isAudioEnabled);
   }, [onTextMessage, onAudioMessage, onTurnComplete, isAudioEnabled, setIsAudioEnabled]);
 
   // Add handler for assistant messages
   const handleAssistantMessage = useCallback((message: string) => {
-    console.log("[WS] handleAssistantMessage called with:", message);
-    if (message.trim()) {
-      const assistantMessage: Message = { role: "assistant", content: message };
-      console.log("[WS] Adding assistant message to history:", assistantMessage);
-      console.log("[WS] Previous history:", conversationHistory.current);
-      conversationHistory.current = [...conversationHistory.current, assistantMessage];
-      console.log("[WS] Updated history:", conversationHistory.current);
-    }
+    console.log("[WS] Adding assistant message to history:", message);
+    const assistantMessage: Message = { role: "assistant", content: message };
+    conversationHistory.current = [...conversationHistory.current, assistantMessage];
+    console.log("[WS] Updated conversation history:", conversationHistory.current);
   }, []);
 
   // Update socket.onmessage to use handleAssistantMessage
@@ -156,7 +154,6 @@ export function useADKWebSocket({
       return;
     }
 
-    const connectionId = "001"; // You can randomize or parametrize this
     const sessionId = "001"; // You can randomize or parametrize this
     const wsUrl = `ws://localhost:8000/ws/${sessionId}?connection_id=${connectionId}`;
     
@@ -265,7 +262,7 @@ export function useADKWebSocket({
       console.error("[WS] Failed to create WebSocket:", err);
       setIsConnected(false);
     }
-  }, [handleAssistantMessage]);
+  }, [handleAssistantMessage, connectionId]);
 
   const sendMessage = useCallback((message: any) => {
     console.log("[WS] Attempting to send message:", message);

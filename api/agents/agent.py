@@ -47,12 +47,9 @@ date_today = date.today()
 def setup_before_agent_call(callback_context: CallbackContext):
     """Setup the agent with client information."""
 
-    # Get user_id from session
-    #user_id = getattr(callback_context.session, 'user_id', '001')
-    connection_id = "001"
-    
+    # Get connection_id from session - the user_id contains the connection_id
+    connection_id = '001'
     # Load client information into session state 
-    
     business_context, annotations = get_info(connection_id)
     print(f"[DEBUG] Business context: {business_context}", flush=True)
     #business_context = None

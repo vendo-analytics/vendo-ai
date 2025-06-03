@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { PlusIcon, PencilEditIcon, TrashIcon, CheckCirclFillIcon, CrossIcon } from "./icons"
 import { toast } from "sonner"
+import { useConnectionId } from "@/lib/connection-context"
 
 // Define types for annotations
 interface Annotation {
@@ -19,7 +20,7 @@ interface Annotation {
 
 export function AnnotationsView() {
   const [annotations, setAnnotations] = useState<Annotation[]>([])
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const [isAddingNew, setIsAddingNew] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
@@ -31,10 +32,13 @@ export function AnnotationsView() {
     user: "Suraj Kaya", // Default user
   })
 
+  // Get the selected connection ID from global context
+  const connectionId = useConnectionId()
+
   // Fetch annotations from backend
   const fetchAnnotations = () => {
     setIsLoading(true)
-    fetch(`/api/annotations?`)
+    fetch(`/api/annotations?connection_id=${connectionId}`)
       .then((res) => res.json())
       .then(setAnnotations)
       .catch((err) => {
@@ -46,7 +50,7 @@ export function AnnotationsView() {
 
   useEffect(() => {
     fetchAnnotations()
-  }, [])
+  }, [connectionId]) // Add connectionId to dependencies
 
   // Filter and sort annotations based on search query
   const filteredAnnotations = annotations
@@ -77,6 +81,7 @@ export function AnnotationsView() {
       const payload = {
         description: formData.description.trim(),
         date: formattedDate,
+        connection_id: connectionId, // Add connection_id to payload
       }
       console.log("POST /api/annotations payload", payload)
       const res = await fetch("/api/annotations", {
@@ -122,7 +127,7 @@ export function AnnotationsView() {
     }
     setIsLoading(true)
     try {
-      const res = await fetch(`/api/annotations/${editingId}`, {
+      const res = await fetch(`/api/annotations/${editingId}?connection_id=${connectionId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ description: formData.description.trim() }),
@@ -147,7 +152,7 @@ export function AnnotationsView() {
     if (!confirm("Are you sure you want to delete this annotation?")) return
     setIsLoading(true)
     try {
-      const res = await fetch(`/api/annotations/${id}`, { method: "DELETE" })
+      const res = await fetch(`/api/annotations/${id}?connection_id=${connectionId}`, { method: "DELETE" })
       if (!res.ok) throw new Error("Failed to delete annotation")
       toast.success("Annotation deleted successfully")
       fetchAnnotations()

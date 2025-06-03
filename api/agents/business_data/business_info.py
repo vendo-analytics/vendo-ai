@@ -38,8 +38,9 @@ def get_info(connection_id: str):
         Dict[str, Any]: Client information including name, company, timezone, etc.
     """
     # Try to get from Firebase first
-
+    
     cached_context = get_business_context_from_state(connection_id)
+    print(f"[DEBUG] Cached context: {cached_context}", flush=True)
     cached_annotations = get_annotations_in_state(connection_id)
     mixpanel_annotations = get_annotations_from_mixpanel(connection_id)
     
@@ -56,7 +57,7 @@ def get_info(connection_id: str):
         return cached_context, annotations
 
     firestore_business_context = firestore_session_service.get_business_context_from_firebase(connection_id)
-    
+    print(f"[DEBUG] Firestore business context: {firestore_business_context}", flush=True)
     #firestore_business_context = None
     if firestore_business_context:
         print(f"[DEBUG] Business context for {connection_id}: {firestore_business_context}")

@@ -1,6 +1,7 @@
 "use client"
 import { CheckCircle, AlertTriangle, XCircle, Clock } from "lucide-react"
 import { useEffect, useState } from "react"
+import { useConnectionId } from "@/lib/connection-context"
 
 // Define types for our events data
 interface Event {
@@ -67,9 +68,12 @@ export function EventsView({ onSelectEvent }: { onSelectEvent: (event: Event) =>
   const [eventsData, setEventsData] = useState<Event[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
+  // Get the selected connection ID from global context
+  const connectionId = useConnectionId()
+
   useEffect(() => {
     setIsLoading(true)
-    fetch("/api/events-data")
+    fetch(`/api/events-data?connection_id=${connectionId}`)
       .then((res) => res.json())
       .then((data) => {
         setEventsData(data)
@@ -80,7 +84,7 @@ export function EventsView({ onSelectEvent }: { onSelectEvent: (event: Event) =>
         setEventsData([])
         setIsLoading(false)
       })
-  }, [])
+  }, [connectionId]) // Add connectionId to dependencies
 
   return (
     <div className="flex flex-col h-full bg-background p-6">

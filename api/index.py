@@ -70,15 +70,14 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True,
                    allow_methods=["*"], allow_headers=["*"])
 
 active_contexts = {}
-connection_id = "001"
-# Example: load from environment or hardcode for now
-mixpanel_client = MixpanelClient(connection_id)
+
 
 langfuse = Langfuse(public_key=os.getenv("LANGFUSE_PUBLIC_KEY"), secret_key=os.getenv("LANGFUSE_SECRET_KEY"))
 
 def get_all_general_context_into_firebase(connection_id: str):
     try:
         messages = firestore_session_service.get_all_general_context(connection_id)
+        print(f"[DEBUG] Messages: {messages}", flush=True)
         if not messages:
             return []
         contents = [msg["content"] for msg in messages if msg.get("content")]
@@ -226,7 +225,7 @@ async def get_chat_history(connection_id: str = Query(...)):
         return {"error": str(e)}, 500
 
 
-@app.get("/api/general_context")
+@app.get("/api/general-context")
 async def get_all_general_context(connection_id: str = Query(...)):
     try:
         mixpanel_dataset_id = firestore_session_service.get_mixpanel_dataset_id(connection_id)
@@ -235,11 +234,11 @@ async def get_all_general_context(connection_id: str = Query(...)):
         messages = firestore_session_service.get_all_general_context(str(connection_id), message_type="general_context")
         return messages or []
     except Exception as e:
-        logger.error(f"[GET /context/general_context] {e}")
+        logger.error(f"[GET /context/general-context] {e}")
         return {"error": str(e)}, 500
 
 
-@app.post("/api/general_context/add")
+@app.post("/api/general-context/add")
 async def add_general_context(request: dict):
     try:
         connection_id = request.get("connection_id")
@@ -258,17 +257,17 @@ async def add_general_context(request: dict):
         )
         return {"success": True, "message": "Content added successfully"}
     except Exception as e:
-        logger.error(f"[POST /general_context/add] {e}")
+        logger.error(f"[POST /general-context/add] {e}")
         return {"error": str(e)}, 500
 
 
-@app.put("/api/general_context/update")
+@app.put("/api/general-context/update")
 async def update_general_context(request: dict):
     try:
         connection_id = request.get("connection_id")
         index = request.get("index")
         new_content = request.get("new_content")
-        message_type = request.get("message_type", "general_context")
+        message_type = request.get("message_type", "general-context")
 
         if not connection_id or index is None or not new_content:
             return {"error": "connection_id, index, and new_content are required"}, 400
@@ -285,11 +284,11 @@ async def update_general_context(request: dict):
             return {"error": "Invalid index or update failed"}, 404
 
     except Exception as e:
-        logger.error(f"[PUT /general_context/update] {e}")
+        logger.error(f"[PUT /general-context/update] {e}")
         return {"error": str(e)}, 500
 
 
-@app.delete("/api/general_context/delete")
+@app.delete("/api/general-context/delete")
 async def delete_general_context(request: dict):
     try:
         connection_id = request.get("connection_id")
@@ -310,7 +309,7 @@ async def delete_general_context(request: dict):
             return {"error": "Invalid index or delete failed"}, 404
 
     except Exception as e:
-        logger.error(f"[DELETE /general_context/delete] {e}")
+        logger.error(f"[DELETE /general-context/delete] {e}")
         return {"error": str(e)}, 500
 
 
@@ -350,7 +349,7 @@ async def update_business_context(request: dict):
         return {"error": str(e)}, 500
 
 @app.get("/api/events-data")
-async def get_events_data(connection_id: str = "001"):
+async def get_events_data(connection_id: str = Query(...)):
     client = bigquery.Client()
     dataset_id = firestore_session_service.get_mixpanel_dataset_id(connection_id)
     query = f"""
@@ -375,7 +374,7 @@ async def get_events_data(connection_id: str = "001"):
     return events
 
 @app.get("/api/event-details")
-async def get_event_details(connection_id: str = "001", event_id: str = None):
+async def get_event_details(connection_id: str = Query(...), event_id: str = None):
     client = bigquery.Client()
     dataset_id = firestore_session_service.get_mixpanel_dataset_id(connection_id)
     if event_id:
@@ -409,10 +408,10 @@ async def get_event_details(connection_id: str = "001", event_id: str = None):
     return properties
 
 @app.get("/api/annotations")
-async def get_annotations():
-    
-    # Call your Mixpanel annotations fetcher
-    df = mixpanel_client.get_mixpanel_annotations_data()
+async def get_annotations(connection_id: str = Query(...)):
+    # Create MixpanelClient with the provided connection_id
+    client = MixpanelClient(connection_id)
+    df = client.get_mixpanel_annotations_data()
     records = df.to_dict(orient="records")
     annotations = [
         {
@@ -427,22 +426,23 @@ async def get_annotations():
     return JSONResponse(content=annotations)
 
 @app.patch("/api/annotations/{annotation_id}")
-async def patch_annotation(annotation_id: str, data: dict = Body(...), connection_id: str = "001"):
+async def patch_annotation(annotation_id: str, data: dict = Body(...), connection_id: str = Query(...)):
     client = MixpanelClient(connection_id)
     result = client.update_annotation(annotation_id, data)
     update_annotations_in_state(connection_id, result)
     return result
 
 @app.delete("/api/annotations/{annotation_id}")
-async def delete_annotation(annotation_id: str, connection_id: str = "001"):
+async def delete_annotation(annotation_id: str, connection_id: str = Query(...)):
     client = MixpanelClient(connection_id)
     result = client.delete_annotation(annotation_id)
     update_annotations_in_state(connection_id, result)
     return result
 
 @app.post("/api/annotations")
-async def create_annotation(data: dict = Body(...), connection_id: str = "001"):
-
+async def create_annotation(data: dict = Body(...)):
+    # Get connection_id from the request body instead of query parameter for POST
+    connection_id = data.get("connection_id", "001")  # Fallback to "001" if not provided
     client = MixpanelClient(connection_id)
     description = data.get("description")
     date = data.get("date")

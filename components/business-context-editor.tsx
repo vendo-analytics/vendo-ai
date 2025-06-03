@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { CheckCirclFillIcon, CrossIcon, PencilEditIcon } from "./icons"
 import { toast } from "sonner"
+import { useConnectionId } from "@/lib/connection-context"
 
 interface BusinessContext {
   name: string
@@ -69,14 +70,15 @@ export function BusinessContextEditor() {
   })
   const [isEditing, setIsEditing] = useState(false)
   const [editingContext, setEditingContext] = useState<BusinessContext>(businessContext)
-  const connectionId = "001"
+  
+  // Use the global connection context instead of hardcoded "001"
+  const connectionId = useConnectionId()
 
   useEffect(() => {
     fetchBusinessContext(connectionId).then((data) => {
       if (data) setBusinessContext(data)
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [connectionId]) // Add connectionId to dependencies
 
   const handleEdit = () => {
     setEditingContext(businessContext)
@@ -85,7 +87,7 @@ export function BusinessContextEditor() {
 
   const handleSave = async () => {
     try {
-      await updateBusinessContext(editingContext.user_id, editingContext)
+      await updateBusinessContext(connectionId, editingContext) // Use connectionId instead of editingContext.user_id
       setBusinessContext(editingContext)
       setIsEditing(false)
       toast.success("Business context updated successfully")

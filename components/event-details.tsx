@@ -3,6 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { CheckCircle } from "lucide-react"
 import { useEffect, useState } from "react"
+import { useConnectionId } from "@/lib/connection-context"
 
 interface EventProperty {
   name: string
@@ -26,11 +27,14 @@ export function EventDetails({ event }: EventDetailProps) {
   const [properties, setProperties] = useState<EventProperty[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
+  // Get the selected connection ID from global context
+  const connectionId = useConnectionId()
+
   useEffect(() => {
     if (!event?.id) return
 
     setIsLoading(true)
-    fetch(`/api/event-details?event_id=${encodeURIComponent(event.id)}`)
+    fetch(`/api/event-details?connection_id=${connectionId}&event_id=${encodeURIComponent(event.id)}`)
       .then((res) => res.json())
       .then((data) => {
         setProperties(data)
@@ -41,7 +45,7 @@ export function EventDetails({ event }: EventDetailProps) {
         setProperties([])
         setIsLoading(false)
       })
-  }, [event?.id])
+  }, [event?.id, connectionId]) // Add connectionId to dependencies
 
   return (
     <div className="flex flex-col h-full bg-background p-6">

@@ -25,7 +25,7 @@ from .tts_service import router as tts_router
 from google.adk.sessions import InMemorySessionService
 from .firestore_instance import firestore_session_service
 from google.adk.agents.callback_context import CallbackContext
-from api.state_manager import update_business_context_in_state
+from api.state_manager import update_business_context_in_state, update_annotations_in_state, get_annotations_in_state
 from google.cloud import bigquery
 from fastapi.responses import JSONResponse
 from api.mixpanel_client import MixpanelClient
@@ -112,6 +112,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, connection_i
     await websocket.accept()
     print(f"[CONNECTED] #{session_id} User: {connection_id}")
 
+    
 
     #session = session_service.create_session(APP_NAME, user_id, str(session_id))
     session = session_service.create_session(app_name=APP_NAME, user_id=connection_id, session_id=str(session_id))
@@ -332,7 +333,6 @@ async def update_business_context(request: dict):
     try:
         connection_id = request.get("connection_id")
         business_context = request.get("business_context")
-        print(f"[DEBUG1] Business context: {business_context}", flush=True)
 
         if not connection_id or not business_context:
             return {"error": "connection_id and business_context are required"}, 400
@@ -354,7 +354,7 @@ async def get_events_data(connection_id: str = "001"):
     client = bigquery.Client()
     dataset_id = firestore_session_service.get_mixpanel_dataset_id(connection_id)
     query = f"""
-        SELECT id, name, description, source, status, count, change
+        SELECT id, name, description, source, status, count, change, first_seen, last_seen
         FROM `{dataset_id}.events_data`
     """
     results = client.query(query).result()
@@ -368,23 +368,39 @@ async def get_events_data(connection_id: str = "001"):
             "status": row.status,
             "count": row.count,
             "change": row.change,
+            "first_seen": row.first_seen,
+            "last_seen": row.last_seen,
         })
     print(f"[DEBUG] Events: {events}", flush=True)
     return events
 
 @app.get("/api/event-details")
-async def get_event_details(connection_id: str = "001"):
+async def get_event_details(connection_id: str = "001", event_id: str = None):
     client = bigquery.Client()
     dataset_id = firestore_session_service.get_mixpanel_dataset_id(connection_id)
-    query = f"""
-        SELECT event, name, type, description
-        FROM `{dataset_id}.event_details`
-    """
-    results = client.query(query).result()
+    if event_id:
+        query = f"""
+            SELECT event_name, name, CASE WHEN type = 'nan' THEN 'Unknown' ELSE type END as type, CASE WHEN description = 'nan' THEN 'No description available' ELSE description END as description
+            FROM `{dataset_id}.event_details`
+            WHERE event_name = @event_id
+        """
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ScalarQueryParameter("event_id", "STRING", event_id)
+            ]
+        )
+        results = client.query(query, job_config=job_config).result()
+    else:
+        query = f"""
+            SELECT event_name, name, type, description
+            FROM `{dataset_id}.event_details`
+        """
+        results = client.query(query).result()
+
     properties = []
     for row in results:
         properties.append({
-            "event": row.event,
+            "event_name": row.event_name,
             "name": row.name,
             "type": row.type,
             "description": row.description,
@@ -414,12 +430,14 @@ async def get_annotations():
 async def patch_annotation(annotation_id: str, data: dict = Body(...), connection_id: str = "001"):
     client = MixpanelClient(connection_id)
     result = client.update_annotation(annotation_id, data)
+    update_annotations_in_state(connection_id, result)
     return result
 
 @app.delete("/api/annotations/{annotation_id}")
 async def delete_annotation(annotation_id: str, connection_id: str = "001"):
     client = MixpanelClient(connection_id)
     result = client.delete_annotation(annotation_id)
+    update_annotations_in_state(connection_id, result)
     return result
 
 @app.post("/api/annotations")

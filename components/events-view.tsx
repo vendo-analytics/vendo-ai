@@ -11,6 +11,8 @@ interface Event {
   status: "Healthy" | "Warning" | "Broken" | "Offline"
   count: number
   change: number
+  first_seen?: string
+  last_seen?: string
 }
 
 // Status badge component
@@ -101,6 +103,8 @@ export function EventsView({ onSelectEvent }: { onSelectEvent: (event: Event) =>
                 <th className="py-3 px-4 font-medium text-muted-foreground">SOURCE</th>
                 <th className="py-3 px-4 font-medium text-muted-foreground">STATUS</th>
                 <th className="py-3 px-4 font-medium text-muted-foreground text-right">LAST 30 DAYS</th>
+                <th className="py-3 px-4 font-medium text-muted-foreground">FIRST SEEN</th>
+                <th className="py-3 px-4 font-medium text-muted-foreground">LAST SEEN</th>
               </tr>
             </thead>
             <tbody>
@@ -132,6 +136,8 @@ export function EventsView({ onSelectEvent }: { onSelectEvent: (event: Event) =>
                       {event.change >= 0 ? "↑" : "↓"} {Math.abs(event.change)}%
                     </div>
                   </td>
+                  <td className="py-4 px-4 text-muted-foreground">{event.first_seen ? new Date(event.first_seen).toLocaleDateString() : "-"}</td>
+                  <td className="py-4 px-4 text-muted-foreground">{event.last_seen ? new Date(event.last_seen).toLocaleDateString() : "-"}</td>
                 </tr>
               ))}
             </tbody>

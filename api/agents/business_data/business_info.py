@@ -5,8 +5,9 @@ from datetime import date
 from zoneinfo import ZoneInfo
 
 from ...firestore_instance import firestore_session_service
-from ...state_manager import get_business_context_from_state
-
+from ...state_manager import get_business_context_from_state, get_annotations_in_state, update_annotations_in_state
+from ...mixpanel_client import MixpanelClient
+from fastapi.responses import JSONResponse
 
 # Fallback client information dictionary
 FALLBACK_CLIENT_INFO: Dict[str, Any] = {
@@ -21,7 +22,8 @@ FALLBACK_CLIENT_INFO: Dict[str, Any] = {
     "currency": "AUD", 
     "annual_target": "$1.2M",
     "current_date": date.today().strftime("%Y-%m-%d"),
-    "dataset_id":"12345678"
+    "dataset_id":"12345678",
+    
 }
 
 
@@ -36,12 +38,25 @@ def get_info(connection_id: str):
         Dict[str, Any]: Client information including name, company, timezone, etc.
     """
     # Try to get from Firebase first
-    cached = get_business_context_from_state(connection_id)
-    if cached:
-        return cached
+
+    cached_context = get_business_context_from_state(connection_id)
+    cached_annotations = get_annotations_in_state(connection_id)
+    mixpanel_annotations = get_annotations_from_mixpanel(connection_id)
     
 
+    if cached_annotations:
+        annotations = cached_annotations
+    elif mixpanel_annotations:
+        annotations = mixpanel_annotations
+    else:
+        annotations = None
+    print(f"[DEBUG] Annotations: {annotations}", flush=True)
+    
+    if cached_context:
+        return cached_context, annotations
+
     firestore_business_context = firestore_session_service.get_business_context_from_firebase(connection_id)
+    
     #firestore_business_context = None
     if firestore_business_context:
         print(f"[DEBUG] Business context for {connection_id}: {firestore_business_context}")
@@ -56,14 +71,14 @@ def get_info(connection_id: str):
         merged_info["current_date"] = date.today().strftime("%Y-%m-%d")
         
         print(f"[DEBUG] Using Firebase business_context for user {connection_id}", flush=True)
-        return merged_info
+        return merged_info, annotations
     else:
         # Use fallback values
         fallback_info = FALLBACK_CLIENT_INFO.copy()
         fallback_info["current_date"] = date.today().strftime("%Y-%m-%d")
         
         print(f"[DEBUG] Using fallback client_info for user {connection_id}", flush=True)
-        return fallback_info
+        return fallback_info, annotations
 
 
 
@@ -86,3 +101,22 @@ def get_current_date() -> date:
         date: The current date for the client context.
     """
     return date.today()
+
+
+def get_annotations_from_mixpanel(connection_id: str):
+    
+    # Call your Mixpanel annotations fetcher
+    mixpanel_client = MixpanelClient(connection_id)
+    df = mixpanel_client.get_mixpanel_annotations_data()
+    records = df.to_dict(orient="records")
+    annotations = [
+        {
+            "id": str(row.get("id", "")),
+            "date": row.get("date", ""),
+            "description": row.get("description", ""),
+            "user": f"{row.get('user_first_name', '')} {row.get('user_last_name', '')}".strip(),
+        }
+        for row in records
+    ]
+    print(f"[DEBUG] Annotations: {annotations}", flush=True)
+    return JSONResponse(content=annotations)

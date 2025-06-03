@@ -20,6 +20,7 @@ from .sub_agents.data_retrieval.agent import data_retrieval
 from .sub_agents.data_planner.agent import data_planner
 from .sub_agents.analyst.agent import analyst_agent
 
+
 from dotenv import load_dotenv
 load_dotenv()
 from .business_data.business_info import get_info
@@ -52,12 +53,13 @@ def setup_before_agent_call(callback_context: CallbackContext):
     
     # Load client information into session state 
     
-    business_context = get_info(connection_id)
+    business_context, annotations = get_info(connection_id)
     print(f"[DEBUG] Business context: {business_context}", flush=True)
     #business_context = None
     callback_context.state["business_context"] = business_context
     callback_context.state["connection_id"] = connection_id
     callback_context.state["dataset_id"] = business_context["dataset_id"]
+    callback_context.state["annotations"] = annotations
     print(f"[DEBUG] Loaded business context for user {connection_id}", flush=True)
     
     user_table = f"gam-dwh.{business_context['dataset_id']}.engage"

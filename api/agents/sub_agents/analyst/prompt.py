@@ -1,3 +1,35 @@
+from ...shared_prompts import routing_escalation_rules
+
+def analyst_prompt(debug: bool = False):
+    if debug:
+        prompt = '''# Data Analyst Agent (DEBUG MODE)
+
+You are the analyst agent in a multi-agent analytics assistant system. In debug mode, you must be more verbose, explain your reasoning, and ask clarifying questions if anything is ambiguous.
+
+---
+
+## Debug Instructions
+- Always explain your reasoning for each step (analysis, chart selection, statistical method, etc).
+- If the user request is ambiguous, ask clarifying questions before proceeding.
+- After generating an analysis, explain the logic and assumptions in detail.
+- If you are unsure about any mapping, metric, or insight, ask the user for clarification.
+- If you need to escalate, explain why and what will happen next.
+
+---
+'''
+        prompt += routing_escalation_rules(debug)
+        prompt += ANALYST_INSTRUCTION
+    else:
+        prompt = '''# Data Analyst Agent (LIVE MODE)
+
+You are the analyst agent in a multi-agent analytics assistant system. Be concise and efficient in your analysis and communication.
+
+---
+'''
+        prompt += routing_escalation_rules(debug)
+        prompt += ANALYST_INSTRUCTION
+    return prompt
+
 ANALYST_INSTRUCTION = """
 # Data Analyst Agent
 

@@ -13,19 +13,19 @@ from google.adk.tools.agent_tool import AgentTool
 from google.adk.tools import google_search, FunctionTool  # Import the tool
 from google.adk.agents.callback_context import CallbackContext # Or ToolContext
 from google.adk.tools import google_search, load_artifacts
+from .tools.notify_vendo import notify_vendo
 
-from .prompt import (ROOT_AGENT_INSTRUCTION, GOOGLE_SEARCH_INSTRUCTION)
+from .prompt import (return_root_agent_prompt, google_search_agent_prompt)
 
 from .sub_agents.data_retrieval.agent import data_retrieval
 from .sub_agents.data_planner.agent import data_planner
 from .sub_agents.analyst.agent import analyst_agent
 
-
 from dotenv import load_dotenv
 load_dotenv()
-from .business_data.business_info import get_info
 
 # Import client information
+from .business_data.business_info import get_info
 from .business_data.schemas import (
     get_user_table_schema,
     get_event_table_schema,
@@ -39,9 +39,12 @@ from .business_data.schemas import (
     format_event_names_for_prompt,
     format_all_schemas_for_prompt
 )
+from .business_data.annotation import get_annotations
+
 
 date_today = date.today()
-
+business_context = get_info()
+debug = os.getenv("DEBUG_MODE", "false").lower() == "true"
 
 
 def setup_before_agent_call(callback_context: CallbackContext):
@@ -78,13 +81,16 @@ def setup_before_agent_call(callback_context: CallbackContext):
     # Add formatted schemas to the state
     callback_context.state["schemas"] = format_all_schemas_for_prompt(user_table, event_table)
 
+    # Add annotations to the state
+    callback_context.state["annotations"] = get_annotations()
+
 
 # google search agent
 google_search_agent = Agent(
     model=os.getenv("MODEL_GEMINI"),
     name='google_search',
     description="Google search agent",
-    instruction=GOOGLE_SEARCH_INSTRUCTION,
+    instruction=google_search_agent_prompt(debug),
     tools=[google_search]
 )
 
@@ -96,7 +102,7 @@ root_agent = Agent(
     name="root_agent",
     model=os.getenv("MODEL_GEMINI"),
     description="Job is to route the user's request to the right sub-agent.",
-    instruction=ROOT_AGENT_INSTRUCTION,
+    instruction=return_root_agent_prompt(debug),
     global_instruction=(
         f"""
         You are a Data Science and Data Analytics Multi Agent System.
@@ -110,6 +116,7 @@ root_agent = Agent(
     ],
     tools=[
         AgentTool(agent=google_search_agent),
+        notify_vendo,
         #load_artifacts, 
     ],
     before_agent_callback=setup_before_agent_call, #Add client context, schemas

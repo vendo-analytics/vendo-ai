@@ -145,7 +145,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, connection_i
 
                 # Set the current connection_id for the agent to use
                 set_current_connection_id(connection_id)
-                result = runner.run_async(session_id=str(session_id), user_id=connection_id, new_message=content_obj)
+                result = await runner.run_async(session_id=str(session_id), user_id=connection_id, new_message=content_obj)
                 
                 span.set_attribute("input", full_input)
                 span.set_attribute("user_id", connection_id)

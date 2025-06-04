@@ -114,7 +114,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, connection_i
     
 
     #session = session_service.create_session(APP_NAME, user_id, str(session_id))
-    session = session_service.create_session(app_name=APP_NAME, user_id=connection_id, session_id=str(session_id))
+    session = await session_service.create_session(app_name=APP_NAME, user_id=connection_id, session_id=str(session_id))
     runner = Runner(app_name=APP_NAME, agent=root_agent, session_service=session_service)
     run_config = RunConfig(response_modalities=["text"])
     organization_id = firestore_session_service.get_connection_info(connection_id).get("organization_id")
@@ -145,7 +145,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, connection_i
 
                 # Set the current connection_id for the agent to use
                 set_current_connection_id(connection_id)
-                result = await runner.run_async(session_id=str(session_id), user_id=connection_id, new_message=content_obj)
+                result = runner.run_async(session_id=str(session_id), user_id=connection_id, new_message=content_obj)
                 
                 span.set_attribute("input", full_input)
                 span.set_attribute("user_id", connection_id)

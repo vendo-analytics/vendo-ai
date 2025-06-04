@@ -21,6 +21,7 @@ from .sub_agents.data_retrieval.agent import data_retrieval
 from .sub_agents.data_planner.agent import data_planner
 from .sub_agents.analyst.agent import analyst_agent
 
+
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -40,18 +41,21 @@ from .business_data.schemas import (
     format_all_schemas_for_prompt
 )
 from .business_data.annotation import get_annotations
+from ..state_manager import get_current_connection_id
 
 
 date_today = date.today()
-business_context = get_info()
+
 debug = os.getenv("DEBUG_MODE", "false").lower() == "true"
 
 
 def setup_before_agent_call(callback_context: CallbackContext):
     """Setup the agent with client information."""
 
-    # Get connection_id from session - the user_id contains the connection_id
-    connection_id = '001'
+    # Get the current connection_id from state_manager (set by WebSocket endpoint)
+    connection_id = get_current_connection_id()
+    print(f"[DEBUG] Using connection_id from state_manager: {connection_id}", flush=True)
+    
     # Load client information into session state 
     business_context, annotations = get_info(connection_id)
     print(f"[DEBUG] Business context: {business_context}", flush=True)

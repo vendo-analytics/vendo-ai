@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "fastapi-dev": "export SSL_CERT_FILE=$(python3 -c 'import certifi; print(certifi.where())') && export MODEL_GEMINI=gemini-2.0-flash-live-001 && pip3 install -r requirements.txt && python3 -m uvicorn api.index:app --reload",
+    "fastapi-dev": "export SSL_CERT_FILE=$(python3 -c 'import certifi; print(certifi.where())') && export MODEL_GEMINI=gemini-2.0-flash && pip3 install -r requirements.txt && python3 -m uvicorn api.index:app --reload",
     "next-dev": "next dev",
     "dev": "concurrently \"npm run next-dev\" \"npm run fastapi-dev\"",
     "build": "next build",

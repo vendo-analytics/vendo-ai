@@ -5,7 +5,7 @@ from datetime import date
 from zoneinfo import ZoneInfo
 
 from ...firestore_instance import firestore_session_service
-from ...state_manager import get_business_context_from_state, get_annotations_in_state, update_annotations_in_state
+from ...state_manager import get_current_connection_id
 from ...mixpanel_client import MixpanelClient
 from fastapi.responses import JSONResponse
 
@@ -27,34 +27,39 @@ FALLBACK_CLIENT_INFO: Dict[str, Any] = {
 }
 
 
-def get_info(connection_id: str):
+def get_info(connection_id: str = None):
     """
     Get the client information dictionary from Firebase with fallback to hardcoded values.
+    Uses the provided connection_id or falls back to current connection_id from global state.
     
     Args:
-        user_id (str): The user ID to fetch business context for
+        connection_id (str, optional): The connection ID to use. If None, uses global state.
         
     Returns:
         Dict[str, Any]: Client information including name, company, timezone, etc.
     """
-    # Try to get from Firebase first
+    # Use provided connection_id or get from state_manager
+    if connection_id is None:
+        connection_id = get_current_connection_id()
+    print(f"[DEBUG] Using connection_id: {connection_id}", flush=True)
     
-    cached_context = get_business_context_from_state(connection_id)
-    print(f"[DEBUG] Cached context: {cached_context}", flush=True)
-    cached_annotations = get_annotations_in_state(connection_id)
+    # # Try to get from cached state first
+    # cached_context = get_business_context_from_state()
+    # print(f"[DEBUG] Cached context: {cached_context}", flush=True)
+    # cached_annotations = get_annotations_in_state()
     mixpanel_annotations = get_annotations_from_mixpanel(connection_id)
     
 
-    if cached_annotations:
-        annotations = cached_annotations
-    elif mixpanel_annotations:
-        annotations = mixpanel_annotations
+    # if cached_annotations:
+    #     annotations = cached_annotations
+    if mixpanel_annotations:
+         annotations = mixpanel_annotations
     else:
-        annotations = None
+         annotations = None
     print(f"[DEBUG] Annotations: {annotations}", flush=True)
     
-    if cached_context:
-        return cached_context, annotations
+    # if cached_context:
+    #     return cached_context, annotations
 
     firestore_business_context = firestore_session_service.get_business_context_from_firebase(connection_id)
     print(f"[DEBUG] Firestore business context: {firestore_business_context}", flush=True)

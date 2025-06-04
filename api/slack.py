@@ -327,7 +327,7 @@ async def agent_to_client_messaging(websocket, live_events, user_id):
                             output_token_count = len(cleaned_buffer) // 4
                             span.set_attribute("gen_ai.usage.completion_tokens", output_token_count)
                             span.set_attribute("gen_ai.usage.total_tokens", output_token_count)
-                            span.set_attribute("gen_ai.response.model", "gemini-2.0-flash-live-001")
+                            span.set_attribute("gen_ai.response.model", "gemini-2.0-flash")
 
                             session_service.append_message(str(user_id), "assistant", buffer, message_type="messages", include_embedding=False)
 
@@ -406,7 +406,7 @@ async def client_to_agent_messaging(websocket, user_id, live_request_queue):
                         # Use proper OpenTelemetry Gen AI conventions
                         span.set_attribute("gen_ai.usage.prompt_tokens", int(input_token_count))
                         span.set_attribute("gen_ai.usage.total_tokens", int(input_token_count))
-                        span.set_attribute("gen_ai.request.model", "gemini-2.0-flash-live-001")
+                        span.set_attribute("gen_ai.request.model", "gemini-2.0-flash")
                         
                         session_service.append_message(str(user_id), "user", content, message_type="messages", include_embedding=False)
                         context = get_context(content, user_id)

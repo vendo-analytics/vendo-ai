@@ -25,7 +25,7 @@ from .tts_service import router as tts_router
 from google.adk.sessions import InMemorySessionService
 from .firestore_instance import firestore_session_service
 from google.adk.agents.callback_context import CallbackContext
-from api.state_manager import update_business_context_in_state, update_annotations_in_state, get_annotations_in_state
+from api.state_manager import set_current_connection_id, get_current_connection_id
 from google.cloud import bigquery
 from fastapi.responses import JSONResponse
 from api.mixpanel_client import MixpanelClient
@@ -143,6 +143,8 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, connection_i
                 full_input = "\n\n".join(context + [content])
                 content_obj = Content(role="user", parts=[Part.from_text(text=full_input)])
 
+                # Set the current connection_id for the agent to use
+                set_current_connection_id(connection_id)
                 result = runner.run_async(session_id=str(session_id), user_id=connection_id, new_message=content_obj)
                 
                 span.set_attribute("input", full_input)
@@ -316,12 +318,12 @@ async def delete_general_context(request: dict):
 @app.get("/api/business-context")
 async def get_business_context(connection_id: str = Query(...)):
     try:
-        
         business_context = firestore_session_service.get_business_context_from_firebase(connection_id)
         if business_context:
             return business_context
         else:
-            return {"error": "Business context not found"}, 404
+            # Return empty object instead of error for auto-context updating
+            return {}
     except Exception as e:
         logger.error(f"[GET /business_context] {e}")
         return {"error": str(e)}, 500
@@ -332,6 +334,7 @@ async def update_business_context(request: dict):
     try:
         connection_id = request.get("connection_id")
         business_context = request.get("business_context")
+        print(f"[DEBUG] NEW Business context: {business_context}", flush=True)
 
         if not connection_id or not business_context:
             return {"error": "connection_id and business_context are required"}, 400
@@ -341,11 +344,36 @@ async def update_business_context(request: dict):
             "business_context": business_context
         }, merge=True)
 
-        update_business_context_in_state(connection_id, business_context)
+        #update_business_context_in_state(connection_id, business_context)
         
         return {"success": True, "message": "Business context updated successfully"}
     except Exception as e:
         logger.error(f"[PUT /business_context] {e}")
+        return {"error": str(e)}, 500
+
+@app.post("/api/set-current-connection")
+async def set_current_connection(request: dict):
+    try:
+        connection_id = request.get("connection_id")
+        
+        if not connection_id:
+            return {"error": "connection_id is required"}, 400
+
+        # Set the current connection_id in the backend state
+        set_current_connection_id(connection_id)
+        
+        return {"success": True, "message": f"Current connection_id set to {connection_id}"}
+    except Exception as e:
+        logger.error(f"[POST /set-current-connection] {e}")
+        return {"error": str(e)}, 500
+
+@app.get("/api/current-connection")
+async def get_current_connection():
+    try:
+        current_id = get_current_connection_id()
+        return {"connection_id": current_id}
+    except Exception as e:
+        logger.error(f"[GET /current-connection] {e}")
         return {"error": str(e)}, 500
 
 @app.get("/api/events-data")
@@ -429,14 +457,14 @@ async def get_annotations(connection_id: str = Query(...)):
 async def patch_annotation(annotation_id: str, data: dict = Body(...), connection_id: str = Query(...)):
     client = MixpanelClient(connection_id)
     result = client.update_annotation(annotation_id, data)
-    update_annotations_in_state(connection_id, result)
+    #update_annotations_in_state(connection_id, result)
     return result
 
 @app.delete("/api/annotations/{annotation_id}")
 async def delete_annotation(annotation_id: str, connection_id: str = Query(...)):
     client = MixpanelClient(connection_id)
     result = client.delete_annotation(annotation_id)
-    update_annotations_in_state(connection_id, result)
+    #update_annotations_in_state(connection_id, result)
     return result
 
 @app.post("/api/annotations")

@@ -76,7 +76,9 @@ export function EventsView({ onSelectEvent }: { onSelectEvent: (event: Event) =>
     fetch(`/api/events-data?connection_id=${connectionId}`)
       .then((res) => res.json())
       .then((data) => {
-        setEventsData(data)
+        // Filter out events with null or empty names
+        const filteredData = data.filter((event: Event) => event.name && event.name.trim() !== "")
+        setEventsData(filteredData)
         setIsLoading(false)
       })
       .catch((err) => {

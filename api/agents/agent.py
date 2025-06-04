@@ -86,7 +86,7 @@ def setup_before_agent_call(callback_context: CallbackContext):
     callback_context.state["schemas"] = format_all_schemas_for_prompt(user_table, event_table)
 
     # Add annotations to the state
-    callback_context.state["annotations"] = get_annotations()
+
 
 
 # google search agent

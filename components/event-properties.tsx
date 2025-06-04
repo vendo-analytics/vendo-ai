@@ -23,7 +23,7 @@ interface EventDetailProps {
   }
 }
 
-export function EventDetails({ event }: EventDetailProps) {
+export function EventProperties({ event }: EventDetailProps) {
   const [properties, setProperties] = useState<EventProperty[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
@@ -34,7 +34,7 @@ export function EventDetails({ event }: EventDetailProps) {
     if (!event?.id) return
 
     setIsLoading(true)
-    fetch(`/api/event-details?connection_id=${connectionId}&event_id=${encodeURIComponent(event.id)}`)
+    fetch(`/api/event-properties?connection_id=${connectionId}&event_id=${encodeURIComponent(event.id)}`)
       .then((res) => res.json())
       .then((data) => {
         setProperties(data)

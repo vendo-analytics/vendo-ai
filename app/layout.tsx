@@ -9,7 +9,7 @@ import { ConnectionProvider } from "@/lib/connection-context"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "AI Chat with Knowledge Base",
+  title: "VendoAI",
   description: "Chat interface with integrated knowledge base sidebar",
 }
 

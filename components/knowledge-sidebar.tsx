@@ -56,7 +56,7 @@ const fetchFirebaseContent = async (connectionId = "001") => {
   }
 }
 
-const addFirebaseContent = async (connectionId: string, content: string, messageType = "general_context") => {
+export const addFirebaseContent = async (connectionId: string, content: string, messageType = "general_context") => {
   try {
     const response = await fetch("/api/general-context/add", {
       method: "POST",
@@ -143,14 +143,15 @@ interface ContentItem {
   index: number
 }
 
-// Update the KnowledgeSidebarProps interface to include annotations view
+// Update the KnowledgeSidebarProps interface to include onContentRefresh
 interface KnowledgeSidebarProps {
-  onNavigate: (view: "chat" | "business-context" | "events" | "event-details" | "annotations") => void
-  currentView: "chat" | "business-context" | "events" | "event-details" | "annotations"
+  onNavigate: (view: "chat" | "business-context" | "events" | "event-properties" | "annotations" | "user-properties" | "add-context") => void
+  currentView: "chat" | "business-context" | "events" | "event-properties" | "annotations" | "user-properties" | "add-context"
   selectedEventId?: string
+  onContentRefresh: number
 }
 
-export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId }: KnowledgeSidebarProps) {
+export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId, onContentRefresh }: KnowledgeSidebarProps) {
   const [contentItems, setContentItems] = useState<ContentItem[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState("")
@@ -162,24 +163,27 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId }: K
   // Use the global connection context
   const { selectedConnectionId, setSelectedConnectionId, companies } = useConnection()
 
-  // Fetch content on component mount or when connection changes
+  // Fetch content on component mount, when connection changes, or when refresh is triggered
   useEffect(() => {
     const loadContent = async () => {
       try {
         setIsLoading(true)
-        console.log("Loading content for connection:", selectedConnectionId)
+        console.log("[DEBUG] Content refresh triggered.", {
+          connectionId: selectedConnectionId,
+          refreshTrigger: onContentRefresh
+        })
         const items = await fetchFirebaseContent(selectedConnectionId)
-        console.log("Loaded items:", items)
+        console.log("[DEBUG] Loaded items:", items)
         setContentItems(items)
       } catch (error) {
+        console.error("[ERROR] Failed to load content:", error)
         toast.error("Failed to load content")
-        console.error("Error loading content:", error)
       } finally {
         setIsLoading(false)
       }
     }
     loadContent()
-  }, [selectedConnectionId])
+  }, [selectedConnectionId, onContentRefresh])
 
   // Filter content based on search query
   const filteredContent = contentItems.filter((item) => {
@@ -226,6 +230,8 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId }: K
   }
 
   const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this item?")) return
+
     try {
       // Find the item by id to get its index
       const item = contentItems.find((item) => item.id === id)
@@ -308,7 +314,7 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId }: K
               <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={() => onNavigate("events")}
-                  isActive={currentView === "events" || currentView === "event-details"}
+                  isActive={currentView === "events" || currentView === "event-properties"}
                 >
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path
@@ -319,6 +325,15 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId }: K
                     />
                   </svg>
                   <span>Events</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => onNavigate("user-properties")}
+                  isActive={currentView === "user-properties"}
+                >
+                  <UserIcon />
+                  <span>User Properties</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
@@ -335,7 +350,7 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId }: K
         <SidebarGroup>
           <div className="flex items-center justify-between px-2">
             <SidebarGroupLabel className="py-0">Content Items ({filteredContent.length})</SidebarGroupLabel>
-            <Button size="sm" onClick={() => setIsAddingNew(true)} className="h-7 w-7 p-0">
+            <Button size="sm" onClick={() => onNavigate("add-context")} className="h-7 w-7 p-0" title="Add new content">
               <PlusIcon size={14} />
             </Button>
           </div>
@@ -361,7 +376,7 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId }: K
                   className="mb-2 min-h-[80px]"
                 />
                 <div className="flex gap-2">
-                  <Button size="sm" onClick={handleAddNew}>
+                  <Button size="sm" onClick={handleAddNew} disabled={!newContent.trim()}>
                     <CheckCirclFillIcon size={14} />
                     Add
                   </Button>
@@ -399,7 +414,7 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId }: K
                           className="mb-2 min-h-[80px]"
                         />
                         <div className="flex gap-2">
-                          <Button size="sm" onClick={handleSaveEdit}>
+                          <Button size="sm" onClick={handleSaveEdit} disabled={!editingContent.trim()}>
                             <CheckCirclFillIcon size={14} />
                             Save
                           </Button>

@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { CheckCirclFillIcon, CrossIcon, PlusIcon } from "./icons"
 import { toast } from "sonner"
-import { addFirebaseContent } from "@/lib/firebase-content"
+//import { addFirebaseContent } from "@/lib/firebase-content"
 import { useConnectionId } from "@/lib/connection-context"
 
 interface AddContextViewProps {

@@ -383,6 +383,7 @@ async def get_events_data(connection_id: str = Query(...)):
     query = f"""
         SELECT id, name, description, source, status, count, change, first_seen, last_seen
         FROM `{dataset_id}.events_data`
+        where name != '$user'
     """
     results = client.query(query).result()
     events = []
@@ -401,14 +402,14 @@ async def get_events_data(connection_id: str = Query(...)):
     print(f"[DEBUG] Events: {events}", flush=True)
     return events
 
-@app.get("/api/event-details")
+@app.get("/api/event-properties")
 async def get_event_details(connection_id: str = Query(...), event_id: str = None):
     client = bigquery.Client()
     dataset_id = firestore_session_service.get_mixpanel_dataset_id(connection_id)
     if event_id:
         query = f"""
             SELECT event_name, name, CASE WHEN type = 'nan' THEN 'Unknown' ELSE type END as type, CASE WHEN description = 'nan' THEN 'No description available' ELSE description END as description
-            FROM `{dataset_id}.event_details`
+            FROM `{dataset_id}.event_properties_data`
             WHERE event_name = @event_id
         """
         job_config = bigquery.QueryJobConfig(
@@ -496,4 +497,25 @@ async def post_feedback(request: Request):
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+@app.get("/api/user-properties")
+async def get_user_properties(connection_id: str = Query(...)):
+    client = bigquery.Client()
+    dataset_id = firestore_session_service.get_mixpanel_dataset_id(connection_id)
+    if dataset_id:
+        query = f"""
+            SELECT event_name, name, CASE WHEN type = 'nan' THEN 'Unknown' ELSE type END as type, CASE WHEN description = 'nan' THEN 'No description available' ELSE description END as description
+            FROM `{dataset_id}.event_properties_data`
+            WHERE event_name = '$user'
+        """
+        results = client.query(query).result()
 
+    properties = []
+    for row in results:
+        properties.append({
+            "event_name": row.event_name,
+            "name": row.name,
+            "type": row.type,
+            "description": row.description,
+        })
+    print(f"[DEBUG] User Properties: {properties}", flush=True)
+    return properties

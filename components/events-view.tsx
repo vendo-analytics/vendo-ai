@@ -8,12 +8,16 @@ interface Event {
   id: string
   name: string
   description: string
-  source: string[]
+  source: string | string[]
   status: "Healthy" | "Warning" | "Broken" | "Offline"
   count: number
   change: number
   first_seen?: string
   last_seen?: string
+}
+
+interface NormalizedEvent extends Omit<Event, 'source'> {
+  source: string[]
 }
 
 // Status badge component
@@ -59,25 +63,54 @@ const SourceBadge = ({ source }: { source: string }) => {
         ? "bg-blue-100 text-blue-800"
         : source === "Stripe"
           ? "bg-green-100 text-green-800"
-          : "bg-gray-100 text-gray-800"
+          : source === "Server-side"
+            ? "bg-purple-100 text-purple-800"
+            : source === "Vendo"
+              ? "bg-indigo-100 text-indigo-800"
+              : "bg-gray-100 text-gray-800"
 
   return <span className={`inline-block px-2 py-1 text-xs rounded-full ${bgColor} mr-1`}>{source}</span>
 }
 
-export function EventsView({ onSelectEvent }: { onSelectEvent: (event: Event) => void }) {
-  const [eventsData, setEventsData] = useState<Event[]>([])
+export function EventsView({ onSelectEvent }: { onSelectEvent: (event: NormalizedEvent) => void }) {
+  const [eventsData, setEventsData] = useState<NormalizedEvent[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   // Get the selected connection ID from global context
   const connectionId = useConnectionId()
 
+  const normalizeSource = (source: Event['source']): string[] => {
+    if (Array.isArray(source)) {
+      return source
+    }
+    if (typeof source === 'string') {
+      // Handle string that looks like array literal: "['Server-side', 'Vendo']"
+      if (source.startsWith('[') && source.endsWith(']')) {
+        try {
+          // Convert single quotes to double quotes for valid JSON
+          const jsonString = source.replace(/'/g, '"')
+          return JSON.parse(jsonString)
+        } catch (e) {
+          console.error('Failed to parse array string:', source)
+        }
+      }
+      return source.split(',').map(s => s.trim()).filter(Boolean)
+    }
+    return []
+  }
+
   useEffect(() => {
     setIsLoading(true)
     fetch(`/api/events-data?connection_id=${connectionId}`)
       .then((res) => res.json())
-      .then((data) => {
-        // Filter out events with null or empty names
-        const filteredData = data.filter((event: Event) => event.name && event.name.trim() !== "")
+      .then((data: Event[]) => {
+        // Filter out events with null or empty names and normalize source data
+        const filteredData = data
+          .filter((event) => event.name && event.name.trim() !== "")
+          .map((event) => ({
+            ...event,
+            source: normalizeSource(event.source)
+          }))
         setEventsData(filteredData)
         setIsLoading(false)
       })
@@ -86,7 +119,7 @@ export function EventsView({ onSelectEvent }: { onSelectEvent: (event: Event) =>
         setEventsData([])
         setIsLoading(false)
       })
-  }, [connectionId]) // Add connectionId to dependencies
+  }, [connectionId])
 
   return (
     <div className="flex flex-col h-full bg-background p-6">
@@ -123,13 +156,7 @@ export function EventsView({ onSelectEvent }: { onSelectEvent: (event: Event) =>
                   <td className="py-4 px-4 font-medium">{event.name}</td>
                   <td className="py-4 px-4 text-muted-foreground">{event.description}</td>
                   <td className="py-4 px-4">
-                    {(
-                      Array.isArray(event.source)
-                        ? event.source
-                        : event.source
-                        ? String(event.source).split(",").map(s => s.trim()).filter(Boolean)
-                        : []
-                    ).map((src) => (
+                    {event.source.map((src) => (
                       <SourceBadge key={src} source={src} />
                     ))}
                   </td>

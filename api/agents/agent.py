@@ -88,7 +88,6 @@ def setup_before_agent_call(callback_context: CallbackContext):
     # Add formatted schemas to the state
     callback_context.state["schemas"] = format_all_schemas_for_prompt(user_table, event_table)
 
- 
 
 # google search agent
 google_search_agent = Agent(

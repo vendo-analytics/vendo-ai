@@ -18,7 +18,7 @@ from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExport
 from google.adk.runners import Runner
 from google.adk.agents.run_config import RunConfig
 from google.genai.types import Content, Part
-from .firebase_client import FirestoreSessionService, embed_text
+from .agents.firebase_client import FirestoreSessionService, embed_text
 from .agents.agent import root_agent
 from .agents.business_data.business_info import FALLBACK_CLIENT_INFO
 from .tts_service import router as tts_router

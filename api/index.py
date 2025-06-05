@@ -18,7 +18,7 @@ from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExport
 from google.adk.runners import Runner
 from google.adk.agents.run_config import RunConfig
 from google.genai.types import Content, Part
-from .firebase_client import FirestoreSessionService, embed_text
+from .agents.firebase_client import FirestoreSessionService, embed_text
 from .agents.agent import root_agent
 from .agents.business_data.business_info import FALLBACK_CLIENT_INFO
 from .tts_service import router as tts_router
@@ -114,7 +114,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, connection_i
     
 
     #session = session_service.create_session(APP_NAME, user_id, str(session_id))
-    session = session_service.create_session(app_name=APP_NAME, user_id=connection_id, session_id=str(session_id))
+    session = await session_service.create_session(app_name=APP_NAME, user_id=connection_id, session_id=str(session_id))
     runner = Runner(app_name=APP_NAME, agent=root_agent, session_service=session_service)
     run_config = RunConfig(response_modalities=["text"])
     organization_id = firestore_session_service.get_connection_info(connection_id).get("organization_id")

@@ -41,33 +41,36 @@ from .business_data.schemas import (
     format_all_schemas_for_prompt
 )
 from .business_data.annotation import get_annotations
-from ..state_manager import get_current_connection_id
+from .state_manager import get_current_connection_id
 
 
 date_today = date.today()
 
-debug = os.getenv("DEBUG_MODE", "false").lower() == "true"
+debug = os.getenv("DEBUG_MODE", "false").lower() == "false"
 
 
 def setup_before_agent_call(callback_context: CallbackContext):
     """Setup the agent with client information."""
 
     # Get the current connection_id from state_manager (set by WebSocket endpoint)
-    connection_id = get_current_connection_id()
+    #connection_id = get_current_connection_id()
+    connection_id = "gb1uauyn0Khjcs4Fgxh8"
     print(f"[DEBUG] Using connection_id from state_manager: {connection_id}", flush=True)
     
     # Load client information into session state 
-    business_context, annotations = get_info(connection_id)
+    business_context = get_info(connection_id)  #TODO add back the annotation 
+
     print(f"[DEBUG] Business context: {business_context}", flush=True)
     #business_context = None
     callback_context.state["business_context"] = business_context
     callback_context.state["connection_id"] = connection_id
     callback_context.state["dataset_id"] = business_context["dataset_id"]
-    callback_context.state["annotations"] = annotations
+    #callback_context.state["annotations"] = annotations
     print(f"[DEBUG] Loaded business context for user {connection_id}", flush=True)
     
-    user_table = f"gam-dwh.{business_context['dataset_id']}.engage"
-    event_table = f"gam-dwh.{business_context['dataset_id']}.export"
+    #TODO: make these dynamic
+    user_table = f"gam-dwh.{business_context['dataset_id']}.mixpanel_user_data"
+    event_table = f"gam-dwh.{business_context['dataset_id']}.mixpanel_all_data_export"
 
     callback_context.state["user_table"] = user_table
     callback_context.state["event_table"] = event_table
@@ -84,9 +87,6 @@ def setup_before_agent_call(callback_context: CallbackContext):
     
     # Add formatted schemas to the state
     callback_context.state["schemas"] = format_all_schemas_for_prompt(user_table, event_table)
-
-    # Add annotations to the state
-
 
 
 # google search agent

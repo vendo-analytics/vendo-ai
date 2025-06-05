@@ -10,6 +10,7 @@ from typing import List, Optional
 import json
 from google.cloud import bigquery
 from google.oauth2 import service_account
+import os
 
 
 def convert_dates_to_strings(obj):
@@ -50,8 +51,11 @@ def query_bigquery(query: str) -> dict:
     print("▶️ Running query_bigquery()")
 
     try:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.join(current_dir, '..', '..', '..')
+        service_key_path = os.path.join(project_root, 'service_key.json')
         credentials = service_account.Credentials.from_service_account_file(
-            "service_key.json",
+            service_key_path,
             scopes=["https://www.googleapis.com/auth/cloud-platform"]
         )
 

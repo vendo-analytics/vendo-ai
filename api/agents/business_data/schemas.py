@@ -160,12 +160,6 @@ EVENT_TABLE_SCHEMA = [
 ]
 
 
-event property name 
-type 
-description 
-sample value
-associated events ['Cart Abandoned']
-
 
 # Event Names and Descriptions
 EVENT_NAMES = {

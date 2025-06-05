@@ -31,8 +31,11 @@ class FirebaseClient:
 class FirestoreSessionService(BaseSessionService):
     def __init__(self, collection_name="vendo_ai_memory"):
         super().__init__()
+        # Load service_key.json from the project root
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        service_key_path = os.path.join(project_root, 'service_key.json')
         self.db = admin_firestore.client(firebase_admin.initialize_app(options={
-            'databaseURL': os.getenv("FIREBASE_DB_URL")
+            'credential': firebase_admin.credentials.Certificate(service_key_path)
         }))
         self.collection = self.db.collection(collection_name)
 
@@ -102,11 +105,10 @@ class FirestoreSessionService(BaseSessionService):
             "memory": memory
         })
 
-    def append_message(self, connection_id: str, role: str, content: str, message_type: str = "messages", include_embedding: bool = False):
+    def append_message(self, connection_id: str, role: str, content: str, message_type: str = "messages", include_embedding: bool = False, title: str = None, author: str = None, created_at: str = None, updated_at: str = None):
 
         if include_embedding:
             embedding = embed_text(content)
-            # Convert embedding to a list of floats that Firestore can store
             embedding_list = embedding.tolist() if hasattr(embedding, 'tolist') else list(embedding)
         else:
             embedding_list = None
@@ -114,10 +116,13 @@ class FirestoreSessionService(BaseSessionService):
         message = {
             "role": role,
             "content": content,
+            "title": title,
+            "author": author,
+            "created_at": created_at,
+            "updated_at": updated_at,
             "timestamp": datetime.datetime.utcnow(),
-            "embedding": embedding_list  # Store as regular list
+            "embedding": embedding_list
         }
-        # Use connection_id directly as the document ID
         self.collection.document(connection_id).set({
             message_type: firestore.ArrayUnion([message])
         }, merge=True)
@@ -163,9 +168,19 @@ class FirestoreSessionService(BaseSessionService):
         messages = doc.to_dict().get(message_type, [])
         result = []
 
-        for msg in messages:
+        for index, msg in enumerate(messages):
             if "content" in msg:
-                result.append(msg["content"])
+                # Return full document object with all metadata
+                result.append({
+                    "id": f"{connection_id}_{index}",
+                    "title": msg.get("title", ""),
+                    "content": msg["content"],
+                    "author": msg.get("author", ""),
+                    "created_at": msg.get("created_at", ""),
+                    "updated_at": msg.get("updated_at", ""),
+                    "timestamp": msg.get("timestamp"),
+                    "index": index
+                })
         
         return result
 
@@ -175,7 +190,7 @@ class FirestoreSessionService(BaseSessionService):
             return result.to_dict()
         return None
     
-    def update_general_context_by_index(self, connection_id: str, index: int, new_content: str, message_type: str = "general_context"):
+    def update_general_context_by_index(self, connection_id: str, index: int, new_content: str, message_type: str = "general_context", new_title: str = None):
         """Update a specific requirement by index"""
         doc_ref = self.collection.document(connection_id)
         doc = doc_ref.get()
@@ -193,6 +208,11 @@ class FirestoreSessionService(BaseSessionService):
         # Update the requirement at the specified index
         general_context[index]["content"] = new_content
         general_context[index]["timestamp"] = datetime.datetime.utcnow()
+        general_context[index]["updated_at"] = datetime.datetime.utcnow().isoformat()
+        
+        # Update title if provided
+        if new_title is not None:
+            general_context[index]["title"] = new_title
         
         # Update embedding for new content
         if "embedding" in general_context[index]:

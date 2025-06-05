@@ -108,7 +108,7 @@ export function BusinessContextEditor() {
 
   return (
     <div className="flex flex-col h-full bg-background p-6">
-      <div className="max-w-2xl mx-auto w-full">
+      <div className="max-w-4xl mx-auto w-full">
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">

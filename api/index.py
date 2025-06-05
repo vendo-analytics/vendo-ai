@@ -23,12 +23,12 @@ from .agents.agent import root_agent
 from .agents.business_data.business_info import FALLBACK_CLIENT_INFO
 from .tts_service import router as tts_router
 from google.adk.sessions import InMemorySessionService
-from .firestore_instance import firestore_session_service
+from .agents.firestore_instance import firestore_session_service
 from google.adk.agents.callback_context import CallbackContext
-from api.state_manager import set_current_connection_id, get_current_connection_id
+from .agents.state_manager import set_current_connection_id, get_current_connection_id
 from google.cloud import bigquery
 from fastapi.responses import JSONResponse
-from api.mixpanel_client import MixpanelClient
+from .agents.mixpanel_client import MixpanelClient
 from langfuse import Langfuse
 
 # Logging
@@ -245,6 +245,10 @@ async def add_general_context(request: dict):
     try:
         connection_id = request.get("connection_id")
         content = request.get("content")
+        title = request.get("title")
+        author = request.get("author")
+        created_at = request.get("created_at")
+        updated_at = request.get("updated_at")
         message_type = request.get("message_type", "general_context")
 
         if not connection_id or not content:
@@ -255,7 +259,11 @@ async def add_general_context(request: dict):
             "user",
             content,
             message_type=message_type,
-            include_embedding=True
+            include_embedding=True,
+            title=title,
+            author=author,
+            created_at=created_at,
+            updated_at=updated_at
         )
         return {"success": True, "message": "Content added successfully"}
     except Exception as e:
@@ -269,16 +277,18 @@ async def update_general_context(request: dict):
         connection_id = request.get("connection_id")
         index = request.get("index")
         new_content = request.get("new_content")
+        new_title = request.get("new_title")
         message_type = request.get("message_type", "general-context")
 
         if not connection_id or index is None or not new_content:
             return {"error": "connection_id, index, and new_content are required"}, 400
 
-        success = firestore_session_service.update_requirement_by_index(
+        success = firestore_session_service.update_general_context_by_index(
             connection_id,
             int(index),
             new_content,
-            message_type=message_type
+            message_type=message_type,
+            new_title=new_title
         )
         if success:
             return {"success": True, "message": "Content updated successfully"}

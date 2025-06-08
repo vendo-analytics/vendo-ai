@@ -124,58 +124,6 @@ export function Chat() {
 
   return (
     <div className="flex flex-col h-full bg-background relative">
-      {/* Header with Audio Controls */}
-      <div className="flex justify-between items-center p-4 border-b shrink-0">
-        <h1 className="text-xl font-bold">Chat</h1>
-        <div className="flex items-center gap-2">
-          <AudioToggle
-            isEnabled={isAudioEnabled}
-            onToggle={() => {
-              console.log("[Audio] Toggle clicked, current state:", isAudioEnabled)
-              const newState = !isAudioEnabled
-              setIsAudioEnabled(newState)
-              // If turning off audio, immediately stop any playing TTS
-              if (!newState && stopTTS) {
-                stopTTS()
-              }
-            }}
-          />
-          <button
-            onClick={isRecording ? stopListening : startListening}
-            className={`p-2 rounded-full ${
-              isRecording ? "bg-red-500 hover:bg-red-600" : "bg-blue-500 hover:bg-blue-600"
-            }`}
-          >
-            {isRecording ? (
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-6 w-6 text-white"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            ) : (
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-6 w-6 text-white"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
-                />
-              </svg>
-            )}
-          </button>
-        </div>
-      </div>
-
       {/* Messages Container */}
       <div
         ref={messagesContainerRef}

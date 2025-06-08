@@ -9,19 +9,20 @@ from .tools import (
 )
 
 from google.adk.agents import Agent
-from .prompt import (
-    QUERY_INSTRUCTION
-)
+
+from .prompt import data_retrieval_prompt
+debug = False  # True = on, False = off
 
 from dotenv import load_dotenv
 load_dotenv()
+
 
 # Data Query Agent - Runs the queries in BQ to bring the right data set based on users request
 data_retrieval = Agent(
     name="data_retrieval",
     model=os.getenv("MODEL_GEMINI"),
     description="Plans and conducts data extraction from the clients database",
-    instruction=QUERY_INSTRUCTION,
+    instruction=data_retrieval_prompt(debug),
     tools=[
         query_bigquery,
         build_chart,

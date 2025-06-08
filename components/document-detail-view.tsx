@@ -51,8 +51,19 @@ export function DocumentDetailView({ document, onBack, onEdit, onDelete }: Docum
         </Button>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>{document.title || 'Untitled Document'}</CardTitle>
-            <div className="flex gap-2">
+            {isEditing ? (
+              <input
+                className="text-2xl font-semibold leading-none tracking-tight border-none outline-none bg-transparent flex-1 mr-4"
+                value={editTitle}
+                onChange={e => setEditTitle(e.target.value)}
+                disabled={isLoading}
+                placeholder="Enter title..."
+                autoFocus
+              />
+            ) : (
+              <CardTitle>{document.title || 'Untitled Document'}</CardTitle>
+            )}
+            <div className="flex gap-1">
               {!isEditing && (
                 <>
                   <Button size="sm" variant="outline" onClick={() => setIsEditing(true)} disabled={isLoading}>
@@ -68,17 +79,6 @@ export function DocumentDetailView({ document, onBack, onEdit, onDelete }: Docum
           <CardContent>
             {/* Meta info */}
             <div className="mb-4 text-sm text-muted-foreground space-y-1">
-              <div><span className="font-semibold">Title:</span> {isEditing ? (
-                <input
-                  className="border rounded px-2 py-1 w-full max-w-md"
-                  value={editTitle}
-                  onChange={e => setEditTitle(e.target.value)}
-                  disabled={isLoading}
-                  required
-                />
-              ) : (
-                <span className="font-medium text-foreground">{document.title || 'Untitled'}</span>
-              )}</div>
               <div><span className="font-semibold">Author:</span> <span className="text-foreground">{document.author || 'Unknown'}</span></div>
               <div><span className="font-semibold">Created At:</span> <span className="text-foreground">{document.createdAt ? new Date(document.createdAt).toLocaleString() : 'Unknown'}</span></div>
               <div><span className="font-semibold">Updated At:</span> <span className="text-foreground">{document.updatedAt ? new Date(document.updatedAt).toLocaleString() : 'Unknown'}</span></div>

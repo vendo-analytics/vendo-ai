@@ -5,7 +5,7 @@
   "scripts": {
     "fastapi-dev": "cross-env SSL_CERT_FILE=$(python3 -c 'import certifi; print(certifi.where())') MODEL_GEMINI=gemini-2.0-flash pip3 install -r requirements.txt && python3 -m uvicorn api.index:app --reload",
     "next-dev": "next dev",
-    "dev": "export GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/service_key.json && concurrently \"pnpm run next-dev\" \"pnpm run fastapi-dev\"",
+    "dev": "concurrently \"pnpm run next-dev\" \"pnpm run fastapi-dev\"",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"

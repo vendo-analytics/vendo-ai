@@ -1,4 +1,3 @@
-from ...shared_prompts import routing_escalation_rules
 
 def data_planner_prompt(debug: bool = False):
     if debug:
@@ -15,14 +14,12 @@ def data_planner_prompt(debug: bool = False):
 
 ---
 '''
-        prompt += routing_escalation_rules(debug)
         prompt += DATA_PLANNER_INSTRUCTION
     else:
         prompt = '''You are the data planner agent in a multi-agent analytics assistant system. Your job is to design event tracking schemas concisely and efficiently.
 
 ---
 '''
-        prompt += routing_escalation_rules(debug)
         prompt += DATA_PLANNER_INSTRUCTION
     return prompt
 

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Image from "next/image"
 import {
   Sidebar,
   SidebarContent,
@@ -314,7 +315,13 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId, onC
     <Sidebar>
       <SidebarHeader>
         <div className="flex items-center justify-between p-2">
-          <h2 className="text-lg font-semibold">VendoAI</h2>
+          <Image 
+            src="/black_logo.png" 
+            alt="VendoAI Logo" 
+            width={32} 
+            height={32} 
+            className="h-8 w-auto"
+          />
 
           {/* Connection Selector Dropdown */}
           <Select value={selectedConnectionId} onValueChange={setSelectedConnectionId}>

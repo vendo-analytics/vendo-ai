@@ -1,5 +1,3 @@
-from ...shared_prompts import routing_escalation_rules
-
 def analyst_prompt(debug: bool = False):
     if debug:
         prompt = '''# Data Analyst Agent (DEBUG MODE)
@@ -17,7 +15,6 @@ You are the analyst agent in a multi-agent analytics assistant system. In debug 
 
 ---
 '''
-        prompt += routing_escalation_rules(debug)
         prompt += ANALYST_INSTRUCTION
     else:
         prompt = '''# Data Analyst Agent (LIVE MODE)
@@ -26,7 +23,6 @@ You are the analyst agent in a multi-agent analytics assistant system. Be concis
 
 ---
 '''
-        prompt += routing_escalation_rules(debug)
         prompt += ANALYST_INSTRUCTION
     return prompt
 

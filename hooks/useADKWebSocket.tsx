@@ -164,11 +164,18 @@ export function useADKWebSocket({
   // Initialize with a new session ID
   const [sessionId, setSessionId] = useState(() => generateSessionId());
 
+  const isConnectingRef = useRef(false);
+
   const connect = useCallback(() => {
+    if (isConnectingRef.current) {
+      console.log("[WS] Skipping connect: already connecting");
+      return;
+    }
     if (ws.current?.readyState === WebSocket.OPEN) {
       console.log("[WS] Already connected, skipping connect");
       return;
     }
+    isConnectingRef.current = true;
 
     const wsUrl = `ws://localhost:8000/ws/${sessionId}?connection_id=${connectionId}`;
     console.log("[WS] Attempting to connect to:", wsUrl);
@@ -586,7 +593,6 @@ export function useADKWebSocket({
     if (ws.current) {
       ws.current.close();
     }
-    connect();
   }, [connectionId, connect, generateSessionId]);
 
   return { 

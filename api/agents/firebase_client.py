@@ -127,7 +127,7 @@ class FirestoreSessionService(BaseSessionService):
             message_type: firestore.ArrayUnion([message])
         }, merge=True)
 
-    async def store_chat_message(
+    def store_chat_message(
         self, 
         connection_id: str, 
         session_id: str, 
@@ -164,9 +164,9 @@ class FirestoreSessionService(BaseSessionService):
             .document(session_id)\
             .collection('messages')
             
-        await chat_ref.add(message)
+        chat_ref.add(message)
 
-    async def get_chat_messages(
+    def get_chat_messages(
         self, 
         connection_id: str, 
         session_id: str,
@@ -193,7 +193,7 @@ class FirestoreSessionService(BaseSessionService):
             chat_ref = chat_ref.limit(limit)
 
         messages = []
-        async for doc in chat_ref.stream():
+        for doc in chat_ref.stream():
             message = doc.to_dict()
             message['id'] = doc.id  # Include the document ID
             messages.append(message)

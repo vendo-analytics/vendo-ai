@@ -109,7 +109,10 @@ def get_top_k_context(user_query: str, connection_id: str, k=3, min_similarity=0
 
 @app.websocket("/ws/{session_id}")
 async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_id: str = Query(...)):
+    print(f"[INIT] /ws/{session_id}?connection_id={connection_id}")
     await websocket.accept()
+    print(f"[ACCEPTED] WebSocket accepted")
+    
     
     print(f"[CONNECTED] #{session_id} User: {connection_id}")
 
@@ -128,7 +131,9 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_i
 
     try:
         while True:
+            print("[WAITING] for client message")
             msg = await websocket.receive_text()
+            print(f"[RECEIVED] {msg}")
             data = json.loads(msg)
             content = data.get("data", "")
 
@@ -141,12 +146,12 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_i
                 content_obj = Content(role="user", parts=[Part.from_text(text=full_input)])
 
                 # Store user message in Firebase chat history
-                await firestore_session_service.store_chat_message(
-                    connection_id=connection_id,
-                    session_id=session_id,
-                    role="user",
-                    content=content  # Including embedding for potential semantic search later
-                )
+                # firestore_session_service.store_chat_message(
+                #     connection_id=connection_id,
+                #     session_id=session_id,
+                #     role="user",
+                #     content=content  # Including embedding for potential semantic search later
+                # )
 
                 # Set the current connection_id for the agent to use
                 set_current_connection_id(connection_id)
@@ -186,7 +191,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_i
                             result_text = event.content.parts[0].text
                             
                             # Store assistant response in Firebase chat history
-                            await firestore_session_service.store_chat_message(
+                            firestore_session_service.store_chat_message(
                                 connection_id=connection_id,
                                 session_id=session_id,
                                 role="assistant",

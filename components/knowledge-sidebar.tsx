@@ -12,15 +12,23 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
-  SidebarInput,
 } from "@/components/ui/sidebar"
-import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
-import { PlusIcon, PencilEditIcon, TrashIcon, CheckCirclFillIcon, CrossIcon, UserIcon } from "./icons"
+import { PlusIcon } from "./icons"
 import { toast } from "sonner"
-import { MessageCircle, FileText, ChevronDown, ChevronRight, NotebookPen, Building2, MousePointerClick, CircleUserRound } from "lucide-react"
+import {
+  MessageCircle,
+  FileText,
+  ChevronDown,
+  ChevronRight,
+  NotebookPen,
+  Building2,
+  MousePointerClick,
+  CircleUserRound,
+  MoreVertical,
+} from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useConnection } from "@/lib/connection-context"
+import { useADKWebSocket } from "@/hooks/useADKWebSocket"
 
 // Firebase API functions - integrated with your backend
 const fetchFirebaseContent = async (connectionId = "001") => {
@@ -168,6 +176,13 @@ interface ContentItem {
   index: number
 }
 
+interface ChatHistoryItem {
+  id: string
+  title: string
+  date: Date
+  preview?: string
+}
+
 export type PageView =
   | "chat"
   | "business-context"
@@ -186,9 +201,17 @@ interface KnowledgeSidebarProps {
   selectedEventId?: string
   onContentRefresh: number
   onDocumentClick?: (doc: any) => void
+  onChatSelect?: (chatId: string) => void
 }
 
-export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId, onContentRefresh, onDocumentClick }: KnowledgeSidebarProps) {
+export function KnowledgeSidebar({
+  onNavigate,
+  currentView,
+  selectedEventId,
+  onContentRefresh,
+  onDocumentClick,
+  onChatSelect,
+}: KnowledgeSidebarProps) {
   const [contentItems, setContentItems] = useState<ContentItem[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState("")
@@ -197,14 +220,40 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId, onC
   const [searchQuery, setSearchQuery] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [isDataDictionaryOpen, setIsDataDictionaryOpen] = useState(
-    currentView === "event-properties" || currentView === "user-properties" || currentView === "data-dictionary"
+    currentView === "event-properties" || currentView === "user-properties" || currentView === "data-dictionary",
   )
   const [isCompanyKnowledgeOpen, setIsCompanyKnowledgeOpen] = useState(
-    currentView === "business-context" || currentView === "annotations" || currentView === "add-context"
+    currentView === "business-context" || currentView === "annotations" || currentView === "add-context",
   )
+  const [isRecentOpen, setIsRecentOpen] = useState(true)
+  const [isTodayOpen, setIsTodayOpen] = useState(true)
+  const [isPrevious7DaysOpen, setIsPrevious7DaysOpen] = useState(true)
+  const [isPrevious30DaysOpen, setIsPrevious30DaysOpen] = useState(true)
+
+  // Replace mock chat history with state from Firebase
+  const [chatHistory, setChatHistory] = useState<{
+    today: ChatHistoryItem[];
+    previous7Days: ChatHistoryItem[];
+    previous30Days: ChatHistoryItem[];
+  }>({
+    today: [],
+    previous7Days: [],
+    previous30Days: []
+  });
 
   // Use the global connection context
   const { selectedConnectionId, setSelectedConnectionId, companies } = useConnection()
+
+  // Get the WebSocket hook context
+  const { loadSession } = useADKWebSocket({
+    onTextMessage: (text, isFinal, isPartial, role) => {
+      // Handle replayed messages
+      // You might want to pass this up to the parent component
+    },
+    onTurnComplete: () => {
+      // Handle turn complete
+    }
+  });
 
   // Fetch content on component mount, when connection changes, or when refresh is triggered
   useEffect(() => {
@@ -213,7 +262,7 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId, onC
         setIsLoading(true)
         console.log("[DEBUG] Content refresh triggered.", {
           connectionId: selectedConnectionId,
-          refreshTrigger: onContentRefresh
+          refreshTrigger: onContentRefresh,
         })
         const items = await fetchFirebaseContent(selectedConnectionId)
         console.log("[DEBUG] Loaded items:", items)
@@ -227,6 +276,21 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId, onC
     }
     loadContent()
   }, [selectedConnectionId, onContentRefresh])
+
+  // Add effect to fetch chat history when connection changes
+  useEffect(() => {
+    const loadChatHistory = async () => {
+      try {
+        const history = await fetchChatHistory(selectedConnectionId);
+        setChatHistory(history);
+      } catch (error) {
+        console.error("Failed to load chat history:", error);
+        toast.error("Failed to load chat history");
+      }
+    };
+    
+    loadChatHistory();
+  }, [selectedConnectionId]);
 
   // Filter content based on search query
   const filteredContent = contentItems.filter((item) => {
@@ -311,17 +375,29 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId, onC
     }
   }
 
+  const handleChatClick = async (chatId: string) => {
+    try {
+      // Load and replay the session
+      await loadSession(chatId);
+      
+      // Navigate to chat view if needed
+      onNavigate("chat");
+      
+      // Call the optional chat select handler
+      if (onChatSelect) {
+        onChatSelect(chatId);
+      }
+    } catch (error) {
+      console.error("Error loading chat:", error);
+      toast.error("Failed to load chat session");
+    }
+  };
+
   return (
     <Sidebar>
       <SidebarHeader>
         <div className="flex items-center justify-between p-2">
-          <Image 
-            src="/black_logo.png" 
-            alt="VendoAI Logo" 
-            width={32} 
-            height={32} 
-            className="h-8 w-auto"
-          />
+          <Image src="/black_logo.png" alt="VendoAI Logo" width={32} height={32} className="h-8 w-auto" />
 
           {/* Connection Selector Dropdown */}
           <Select value={selectedConnectionId} onValueChange={setSelectedConnectionId}>
@@ -351,7 +427,7 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId, onC
                   <span>Chat</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-            
+
               {/* Data Dictionary Parent */}
               <SidebarMenuItem>
                 <SidebarMenuButton
@@ -369,10 +445,7 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId, onC
                 {isDataDictionaryOpen && (
                   <SidebarMenu className="ml-6 mt-1">
                     <SidebarMenuItem>
-                      <SidebarMenuButton
-                        onClick={() => onNavigate("events")}
-                        isActive={currentView === "events" }
-                      >
+                      <SidebarMenuButton onClick={() => onNavigate("events")} isActive={currentView === "events"}>
                         <MousePointerClick size={16} />
                         <span>Events</span>
                       </SidebarMenuButton>
@@ -394,9 +467,7 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId, onC
                 <SidebarMenuButton
                   onClick={() => setIsCompanyKnowledgeOpen((open) => !open)}
                   isActive={
-                    currentView === "business-context" ||
-                    currentView === "annotations" ||
-                    currentView === "add-context"
+                    currentView === "business-context" || currentView === "annotations" || currentView === "add-context"
                   }
                 >
                   {isCompanyKnowledgeOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
@@ -422,7 +493,7 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId, onC
                         <span>Annotations</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
-                
+
                     <SidebarGroupContent>
                       <SidebarMenu>
                         {isLoading ? (
@@ -439,7 +510,7 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId, onC
                                 onClick={() => onDocumentClick?.(item)}
                               >
                                 <FileText size={16} />
-                                <span className="truncate">{item.title || 'Untitled'}</span>
+                                <span className="truncate">{item.title || "Untitled"}</span>
                               </SidebarMenuButton>
                             </SidebarMenuItem>
                           ))
@@ -462,7 +533,189 @@ export function KnowledgeSidebar({ onNavigate, currentView, selectedEventId, onC
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {/* Chat History Section */}
+        <SidebarGroup>
+          <div className="flex items-center justify-between px-2">
+            <SidebarGroupLabel
+              className="py-0 cursor-pointer flex items-center"
+              onClick={() => setIsRecentOpen(!isRecentOpen)}
+            >
+              {isRecentOpen ? <ChevronDown size={14} className="mr-1" /> : <ChevronRight size={14} className="mr-1" />}
+              Recent
+            </SidebarGroupLabel>
+          </div>
+
+          {/* Search Shortcut */}
+          <div className="px-4 py-2 text-xs text-muted-foreground">
+            Press <kbd className="px-1 py-0.5 bg-muted rounded border border-border">k</kbd> to search
+          </div>
+
+          {isRecentOpen && (
+            <SidebarGroupContent>
+              {/* Today's Chats */}
+              <div className="px-4 py-1">
+                <div
+                  className="text-xs font-medium text-muted-foreground cursor-pointer flex items-center"
+                  onClick={() => setIsTodayOpen(!isTodayOpen)}
+                >
+                  {isTodayOpen ? (
+                    <ChevronDown size={12} className="mr-1" />
+                  ) : (
+                    <ChevronRight size={12} className="mr-1" />
+                  )}
+                  Today
+                </div>
+                {isTodayOpen && (
+                  <div className="mt-1">
+                    {chatHistory.today.map((chat) => (
+                      <div
+                        key={chat.id}
+                        className="flex items-center justify-between py-1 px-2 hover:bg-muted/50 rounded-md cursor-pointer group"
+                        onClick={() => handleChatClick(chat.id)}
+                      >
+                        <div className="text-sm truncate">{chat.title}</div>
+                        <MoreVertical size={14} className="opacity-0 group-hover:opacity-100 text-muted-foreground" />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Previous 7 Days */}
+              <div className="px-4 py-1">
+                <div
+                  className="text-xs font-medium text-muted-foreground cursor-pointer flex items-center"
+                  onClick={() => setIsPrevious7DaysOpen(!isPrevious7DaysOpen)}
+                >
+                  {isPrevious7DaysOpen ? (
+                    <ChevronDown size={12} className="mr-1" />
+                  ) : (
+                    <ChevronRight size={12} className="mr-1" />
+                  )}
+                  Previous 7 Days
+                </div>
+                {isPrevious7DaysOpen && (
+                  <div className="mt-1">
+                    {chatHistory.previous7Days.map((chat) => (
+                      <div
+                        key={chat.id}
+                        className="flex items-center justify-between py-1 px-2 hover:bg-muted/50 rounded-md cursor-pointer group"
+                        onClick={() => handleChatClick(chat.id)}
+                      >
+                        <div className="text-sm truncate">{chat.title}</div>
+                        <MoreVertical size={14} className="opacity-0 group-hover:opacity-100 text-muted-foreground" />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Previous 30 Days */}
+              <div className="px-4 py-1">
+                <div
+                  className="text-xs font-medium text-muted-foreground cursor-pointer flex items-center"
+                  onClick={() => setIsPrevious30DaysOpen(!isPrevious30DaysOpen)}
+                >
+                  {isPrevious30DaysOpen ? (
+                    <ChevronDown size={12} className="mr-1" />
+                  ) : (
+                    <ChevronRight size={12} className="mr-1" />
+                  )}
+                  Previous 30 Days
+                </div>
+                {isPrevious30DaysOpen && (
+                  <div className="mt-1">
+                    {chatHistory.previous30Days.map((chat) => (
+                      <div
+                        key={chat.id}
+                        className="flex items-center justify-between py-1 px-2 hover:bg-muted/50 rounded-md cursor-pointer group"
+                        onClick={() => handleChatClick(chat.id)}
+                      >
+                        <div className="text-sm truncate">{chat.title}</div>
+                        <MoreVertical size={14} className="opacity-0 group-hover:opacity-100 text-muted-foreground" />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </SidebarGroupContent>
+          )}
+        </SidebarGroup>
       </SidebarContent>
     </Sidebar>
   )
 }
+
+// Add this near the top with other Firebase API functions
+const fetchChatHistory = async (connectionId: string) => {
+  try {
+    const response = await fetch(`/api/chat/history?connection_id=${connectionId}`);
+    if (!response.ok) throw new Error("Failed to fetch chat history");
+    const data = await response.json();
+    
+    // Group chats by date ranges
+    const today = new Date();
+    const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    // Helper function to format chat title
+    const formatChatTitle = (timestamp: string | Date) => {
+      const date = new Date(timestamp);
+      return `Chat ${date.toLocaleString()}`; // Shows both date and time
+    };
+
+    // Helper function to group chats by date
+    const groupChats = (chats: any[]) => {
+      return {
+        today: chats
+          .filter((chat) => {
+            const chatDate = new Date(chat.timestamp);
+            return chatDate.toDateString() === today.toDateString();
+          })
+          .map((chat) => ({
+            id: chat.session_id,
+            title: formatChatTitle(chat.timestamp),
+            date: new Date(chat.timestamp),
+            preview: chat.content
+          })),
+        previous7Days: chats
+          .filter((chat) => {
+            const chatDate = new Date(chat.timestamp);
+            return chatDate > sevenDaysAgo && chatDate.toDateString() !== today.toDateString();
+          })
+          .map((chat) => ({
+            id: chat.session_id,
+            title: formatChatTitle(chat.timestamp),
+            date: new Date(chat.timestamp),
+            preview: chat.content
+          })),
+        previous30Days: chats
+          .filter((chat) => {
+            const chatDate = new Date(chat.timestamp);
+            return chatDate > thirtyDaysAgo && chatDate <= sevenDaysAgo;
+          })
+          .map((chat) => ({
+            id: chat.session_id,
+            title: formatChatTitle(chat.timestamp),
+            date: new Date(chat.timestamp),
+            preview: chat.content
+          }))
+      };
+    };
+
+    // Sort chats by date (newest first) before grouping
+    const sortedChats = data.sort((a: any, b: any) => {
+      return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+    });
+
+    return groupChats(sortedChats);
+  } catch (error) {
+    console.error("Error fetching chat history:", error);
+    return {
+      today: [],
+      previous7Days: [],
+      previous30Days: []
+    };
+  }
+};

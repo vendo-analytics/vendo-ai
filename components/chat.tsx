@@ -11,9 +11,11 @@ import type { Message, CreateMessage, ChatRequestOptions } from "ai"
 import { toast } from "sonner"
 import { AudioToggle } from "./AudioToggle"
 
-export function Chat() {
-  const chatId = "001"
+interface ChatProps {
+  chatId?: string;
+}
 
+export function Chat({ chatId = "001" }: ChatProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState<string>("")
   const [isLoading, setIsLoading] = useState<boolean>(false)

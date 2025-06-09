@@ -142,9 +142,11 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_i
                 continue
                    
             with tracer.start_as_current_span("user_message") as span:
-                context = get_all_general_context_into_firebase(connection_id)
+                #context = get_all_general_context_into_firebase(connection_id)
+                context = ["You are a helpful assistant that can answer questions and help with tasks."]
                 full_input = "\n\n".join(context + [content])
                 content_obj = Content(role="user", parts=[Part.from_text(text=full_input)])
+           
 
                 # Store user message in Firebase chat history
                 firestore_session_service.store_chat_message(
@@ -246,8 +248,33 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_i
 @app.get("/api/chat/history")
 async def get_chat_history(connection_id: str = Query(...)):
     try:
-        messages = session_service.get_messages(connection_id)
-        return messages
+        print(f"[DEBUG] Getting chat history for {connection_id}")
+        # Get the chat_history document
+        chat_ref = firestore_session_service.collection.document(connection_id)\
+            .collection('chat_history')\
+            .document('messages')
+        
+        doc = chat_ref.get()
+        if not doc.exists:
+            return []
+            
+        sessions_data = doc.to_dict()
+        
+        all_chats = []
+        for session_id, messages in sessions_data.items():
+            if messages:  # If session has messages
+                # Use the first message for preview and timestamp
+                first_message = messages[0]
+                all_chats.append({
+                    'session_id': session_id,
+                    'timestamp': first_message.get('timestamp'),
+                    'content': first_message.get('content', ''),
+                    'message_count': len(messages)
+                })
+        
+        # Sort by timestamp descending (newest first)
+        all_chats.sort(key=lambda x: x['timestamp'], reverse=True)
+        return all_chats
     except Exception as e:
         logger.error(f"[GET /chat/history] {e}")
         return {"error": str(e)}, 500
@@ -555,3 +582,19 @@ async def get_user_properties(connection_id: str = Query(...)):
         })
     print(f"[DEBUG] User Properties: {properties}", flush=True)
     return properties
+
+@app.get("/api/chat/messages")
+async def get_chat_messages(
+    connection_id: str = Query(...),
+    session_id: str = Query(...)
+):
+    try:
+        messages = firestore_session_service.get_chat_messages(
+            connection_id=connection_id,
+            session_id=session_id
+        )
+        print(f"[DEBUG] Messages: {messages}")
+        return messages
+    except Exception as e:
+        logger.error(f"[GET /chat/messages] {e}")
+        return {"error": str(e)}, 500

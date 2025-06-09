@@ -136,14 +136,7 @@ class FirestoreSessionService(BaseSessionService):
         include_embedding: bool = False
     ) -> None:
         """
-        Store a chat message in Firestore under a specific session
-        
-        Args:
-            connection_id: The ID of the connection
-            session_id: The unique session ID
-            role: The role of the message sender (user/assistant)
-            content: The message content
-            include_embedding: Whether to include embeddings for semantic search
+        Store a chat message directly in chat_history
         """
         if include_embedding:
             embedding = embed_text(content)
@@ -158,13 +151,23 @@ class FirestoreSessionService(BaseSessionService):
             "embedding": embedding_list
         }
 
-        # Store under chat_history/{connection_id}/sessions/{session_id}/messages
-        chat_ref = self.collection.document(connection_id)\
-            .collection('chat_history')\
-            .document(session_id)\
-            .collection('messages')
-            
-        chat_ref.add(message)
+        # Get the chat_history document
+        chat_ref = self.collection.document(connection_id).collection("chat_history").document("messages")
+        
+        # Get current messages or initialize empty dict
+        doc = chat_ref.get()
+        current_data = doc.to_dict() if doc.exists else {}
+        
+        # Get current session messages or initialize empty list
+        session_messages = current_data.get(session_id, [])
+        
+        # Append new message
+        session_messages.append(message)
+        
+        # Update the document with the new message
+        chat_ref.set({
+            session_id: session_messages
+        }, merge=True)
 
     def get_chat_messages(
         self, 
@@ -174,29 +177,23 @@ class FirestoreSessionService(BaseSessionService):
     ) -> List[dict]:
         """
         Retrieve chat messages for a specific session
-        
-        Args:
-            connection_id: The ID of the connection
-            session_id: The unique session ID
-            limit: Optional limit on number of messages to return
-        
-        Returns:
-            List of messages in chronological order
         """
         chat_ref = self.collection.document(connection_id)\
-            .collection('chat_history')\
-            .document(session_id)\
-            .collection('messages')\
-            .order_by('timestamp', direction=firestore.Query.ASCENDING)
-
+            .collection("chat_history")\
+            .document("messages")
+        
+        doc = chat_ref.get()
+        if not doc.exists:
+            return []
+            
+        data = doc.to_dict()
+        messages = data.get(session_id, [])
+        
+        # Sort by timestamp
+        messages.sort(key=lambda x: x['timestamp'])
+        
         if limit:
-            chat_ref = chat_ref.limit(limit)
-
-        messages = []
-        for doc in chat_ref.stream():
-            message = doc.to_dict()
-            message['id'] = doc.id  # Include the document ID
-            messages.append(message)
+            messages = messages[:limit]
             
         return messages
 

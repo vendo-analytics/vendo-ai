@@ -84,6 +84,7 @@ async function deleteDocument(connectionId: string, index: number) {
 
 export default function Page() {
   const [currentView, setCurrentView] = useState<PageView>("chat")
+  const [selectedChatId, setSelectedChatId] = useState<string>("001")
   const [selectedEvent, setSelectedEvent] = useState<any>(null)
   const [selectedDocument, setSelectedDocument] = useState<any>(null)
   const [contentRefreshTrigger, setContentRefreshTrigger] = useState(0)
@@ -139,6 +140,11 @@ export default function Page() {
     setCurrentView("chat")
   }
 
+  const handleChatSelect = (chatId: string) => {
+    setSelectedChatId(chatId);
+    setCurrentView("chat");
+  };
+
   // New: Data Dictionary selection view
   const renderDataDictionaryMenu = () => (
     <div className="flex flex-col gap-4 p-8">
@@ -159,6 +165,7 @@ export default function Page() {
           setCurrentView("document-detail");
           setSelectedDocument(doc);
         }}
+        onChatSelect={handleChatSelect}
       />
       <SidebarInset>
         <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
@@ -170,7 +177,7 @@ export default function Page() {
           </div>
         </header>
         <div className="flex flex-1 flex-col">
-          {currentView === "chat" && <Chat />}
+          {currentView === "chat" && <Chat chatId={selectedChatId} />}
           {currentView === "business-context" && <BusinessContextEditor />}
           {currentView === "events" && <EventsView onSelectEvent={handleSelectEvent} />}
           {currentView === "event-properties" && selectedEvent && <EventProperties event={selectedEvent} />}

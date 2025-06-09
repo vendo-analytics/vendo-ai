@@ -186,8 +186,10 @@ export function useADKWebSocket({
 
       socket.onopen = () => {
         console.log("[WS] Connected successfully with session:", sessionId);
+        socket.send(JSON.stringify({ type: "ping", timestamp: Date.now() }));
         setIsConnected(true);
         reconnectAttempts.current = 0;
+        
         
         // Setup ping interval
         pingIntervalRef.current = setInterval(() => {

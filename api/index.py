@@ -131,6 +131,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_i
 
     try:
         while True:
+            
             print("[WAITING] for client message")
             msg = await websocket.receive_text()
             print(f"[RECEIVED] {msg}")

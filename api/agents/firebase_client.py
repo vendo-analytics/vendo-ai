@@ -127,14 +127,79 @@ class FirestoreSessionService(BaseSessionService):
             message_type: firestore.ArrayUnion([message])
         }, merge=True)
 
-    
+    async def store_chat_message(
+        self, 
+        connection_id: str, 
+        session_id: str, 
+        role: str,
+        content: str,
+        include_embedding: bool = False
+    ) -> None:
+        """
+        Store a chat message in Firestore under a specific session
+        
+        Args:
+            connection_id: The ID of the connection
+            session_id: The unique session ID
+            role: The role of the message sender (user/assistant)
+            content: The message content
+            include_embedding: Whether to include embeddings for semantic search
+        """
+        if include_embedding:
+            embedding = embed_text(content)
+            embedding_list = embedding.tolist() if hasattr(embedding, 'tolist') else list(embedding)
+        else:
+            embedding_list = None
 
-    def get_messages(self, connection_id: str):
-        # Use connection_id directly as the document ID
-        doc = self.collection.document(connection_id).get()
-        if doc.exists:
-            return doc.to_dict().get("messages", [])
-        return []
+        message = {
+            "role": role,
+            "content": content,
+            "timestamp": datetime.datetime.utcnow(),
+            "embedding": embedding_list
+        }
+
+        # Store under chat_history/{connection_id}/sessions/{session_id}/messages
+        chat_ref = self.collection.document(connection_id)\
+            .collection('chat_history')\
+            .document(session_id)\
+            .collection('messages')
+            
+        await chat_ref.add(message)
+
+    async def get_chat_messages(
+        self, 
+        connection_id: str, 
+        session_id: str,
+        limit: int = None
+    ) -> List[dict]:
+        """
+        Retrieve chat messages for a specific session
+        
+        Args:
+            connection_id: The ID of the connection
+            session_id: The unique session ID
+            limit: Optional limit on number of messages to return
+        
+        Returns:
+            List of messages in chronological order
+        """
+        chat_ref = self.collection.document(connection_id)\
+            .collection('chat_history')\
+            .document(session_id)\
+            .collection('messages')\
+            .order_by('timestamp', direction=firestore.Query.ASCENDING)
+
+        if limit:
+            chat_ref = chat_ref.limit(limit)
+
+        messages = []
+        async for doc in chat_ref.stream():
+            message = doc.to_dict()
+            message['id'] = doc.id  # Include the document ID
+            messages.append(message)
+            
+        return messages
+
     
     def get_general_context(self, connection_id: str, message_type: str = "general_context"):
         doc = self.collection.document(connection_id).get()

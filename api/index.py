@@ -5,7 +5,7 @@ import logging
 import asyncio
 import numpy as np
 from pathlib import Path
-from datetime import date
+from datetime import date, datetime
 from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, Body, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,6 +30,7 @@ from google.cloud import bigquery
 from fastapi.responses import JSONResponse
 from .agents.mixpanel_client import MixpanelClient
 from langfuse import Langfuse
+import secrets
 
 # Logging
 logging.basicConfig(level=logging.DEBUG)
@@ -107,25 +108,27 @@ def get_top_k_context(user_query: str, connection_id: str, k=3, min_similarity=0
         return []
 
 @app.websocket("/ws/{session_id}")
-async def websocket_endpoint(websocket: WebSocket, session_id: int, connection_id: str = Query(...)):
+async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_id: str = Query(...)):
     await websocket.accept()
+    
     print(f"[CONNECTED] #{session_id} User: {connection_id}")
 
+    # Create session with the provided session ID
+    session = session_service.create_session(
+        app_name=APP_NAME, 
+        user_id=connection_id, 
+        session_id=session_id  # Use the session_id from frontend
+    )
     
-
-    #session = session_service.create_session(APP_NAME, user_id, str(session_id))
-    session = await session_service.create_session(app_name=APP_NAME, user_id=connection_id, session_id=str(session_id))
     runner = Runner(app_name=APP_NAME, agent=root_agent, session_service=session_service)
     run_config = RunConfig(response_modalities=["text"])
     organization_id = firestore_session_service.get_connection_info(connection_id).get("organization_id")
     source_id = firestore_session_service.get_connection_info(connection_id).get("source_id")
     mixpanel_details = firestore_session_service.get_mixpanel_details(organization_id, source_id)
-    print(f"[DEBUG] Organization ID: {organization_id}", flush=True)
 
     try:
         while True:
             msg = await websocket.receive_text()
-            
             data = json.loads(msg)
             content = data.get("data", "")
 
@@ -133,19 +136,25 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, connection_i
                 continue
                    
             with tracer.start_as_current_span("user_message") as span:
-                
-                
-                #session_service.append_message(str(user_id), "user", content)
-
-                context = get_all_general_context_into_firebase (connection_id)
-                
-
+                context = get_all_general_context_into_firebase(connection_id)
                 full_input = "\n\n".join(context + [content])
                 content_obj = Content(role="user", parts=[Part.from_text(text=full_input)])
 
+                # Store user message in Firebase chat history
+                await firestore_session_service.store_chat_message(
+                    connection_id=connection_id,
+                    session_id=session_id,
+                    role="user",
+                    content=content  # Including embedding for potential semantic search later
+                )
+
                 # Set the current connection_id for the agent to use
                 set_current_connection_id(connection_id)
-                result = runner.run_async(session_id=str(session_id), user_id=connection_id, new_message=content_obj)
+                result = runner.run_async(
+                    session_id=session_id, 
+                    user_id=connection_id, 
+                    new_message=content_obj
+                )
                 
                 span.set_attribute("input", full_input)
                 span.set_attribute("user_id", connection_id)
@@ -158,7 +167,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, connection_i
                 result_text = ""
                 
                 async for event in result:
-                    # 🎤 Check if this event contains audio data
+                    # Handle audio events as before
                     is_audio = event.content and event.content.parts and event.content.parts[0].inline_data and event.content.parts[0].inline_data.mime_type.startswith("audio/pcm")
                     
                     if is_audio:
@@ -173,9 +182,17 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, connection_i
                             continue
                         
                     if event.is_final_response():
-     
                         if event.content and event.content.parts:
                             result_text = event.content.parts[0].text
+                            
+                            # Store assistant response in Firebase chat history
+                            await firestore_session_service.store_chat_message(
+                                connection_id=connection_id,
+                                session_id=session_id,
+                                role="assistant",
+                                content=result_text # Including embedding for potential semantic search later
+                            )
+                            
                             span.set_attribute("output", result_text)
                             span.set_attribute("user_id", connection_id)
                             span.set_attribute("organization_id", organization_id)
@@ -198,13 +215,16 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, connection_i
                             trace_id = format(span.get_span_context().trace_id, '032x')
                             print(f"Trace ID: {trace_id}")
 
-                #session_service.append_message(str(user_id), "assistant", result_text)
+                trace_id = format(span.get_span_context().trace_id, '032x')
+                print(f"Trace ID: {trace_id}")
+
                 await websocket.send_text(json.dumps({
                     "mime_type": "text/plain",
                     "data": result_text,
                     "traceId": trace_id if 'trace_id' in locals() else None,
                     "turn_complete": True,
-                    "is_speech": True
+                    "is_speech": True,
+                    "session_id": session_id  # Send the session ID back to client
                 }))
                 
     except WebSocketDisconnect:

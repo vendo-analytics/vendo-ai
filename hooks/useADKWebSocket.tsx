@@ -147,33 +147,47 @@ export function useADKWebSocket({
     console.log("[WS] Updated conversation history:", conversationHistory.current);
   }, []);
 
-  // Update socket.onmessage to use handleAssistantMessage
+  // Add ref for ping interval
+  const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Generate a new session ID
+  const generateSessionId = () => {
+    const timestamp = new Date().toISOString()
+      .replace(/[-:]/g, '')  // Remove dashes and colons
+      .split('.')[0];        // Remove milliseconds
+    const randomHex = Array.from(crypto.getRandomValues(new Uint8Array(2)))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+    return `${timestamp}_${randomHex}`;
+  };
+
+  // Initialize with a new session ID
+  const [sessionId, setSessionId] = useState(() => generateSessionId());
+
   const connect = useCallback(() => {
     if (ws.current?.readyState === WebSocket.OPEN) {
       console.log("[WS] Already connected, skipping connect");
       return;
     }
 
-    const sessionId = "001"; // You can randomize or parametrize this
     const wsUrl = `ws://localhost:8000/ws/${sessionId}?connection_id=${connectionId}`;
-    
     console.log("[WS] Attempting to connect to:", wsUrl);
     
     try {
       const socket = new WebSocket(wsUrl);
       ws.current = socket;
 
-      // Add ping/pong to keep connection alive
-      const pingInterval = setInterval(() => {
-        if (socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({ type: "ping" }));
-        }
-      }, 30000); // Send ping every 30 seconds
-
       socket.onopen = () => {
-        console.log("[WS] Connected successfully");
+        console.log("[WS] Connected successfully with session:", sessionId);
         setIsConnected(true);
         reconnectAttempts.current = 0;
+        
+        // Setup ping interval
+        pingIntervalRef.current = setInterval(() => {
+          if (socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: "ping" }));
+          }
+        }, 30000);
       };
 
       socket.onmessage = (event) => {
@@ -241,28 +255,32 @@ export function useADKWebSocket({
       socket.onerror = (err) => {
         console.error("[WS] WebSocket error:", err);
         setIsConnected(false);
-        clearInterval(pingInterval);
+        if (pingIntervalRef.current) {
+          clearInterval(pingIntervalRef.current);
+        }
       };
 
       socket.onclose = (event) => {
-        console.log("[WS] Disconnected with code:", event.code, "reason:", event.reason);
+        console.log("[WS] Connection closed:", event);
         setIsConnected(false);
-        clearInterval(pingInterval);
+        if (pingIntervalRef.current) {
+          clearInterval(pingIntervalRef.current);
+        }
         
-        // Only attempt to reconnect if we're not intentionally closing
+        // Attempt to reconnect
         if (reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
           reconnectAttempts.current += 1;
-          console.log(`[WS] Attempting to reconnect (${reconnectAttempts.current}/${MAX_RECONNECT_ATTEMPTS})...`);
-          reconnectTimeout.current = setTimeout(connect, RECONNECT_DELAY * reconnectAttempts.current);
-        } else {
-          console.error("[WS] Max reconnection attempts reached.");
+          setTimeout(() => {
+            console.log(`[WS] Attempting to reconnect (${reconnectAttempts.current}/${MAX_RECONNECT_ATTEMPTS})`);
+            connect();
+          }, RECONNECT_DELAY);
         }
       };
-    } catch (err) {
-      console.error("[WS] Failed to create WebSocket:", err);
+    } catch (error) {
+      console.error("[WS] Failed to create WebSocket:", error);
       setIsConnected(false);
     }
-  }, [handleAssistantMessage, connectionId]);
+  }, [connectionId, sessionId, onTextMessage, onAudioMessage, onTurnComplete]);
 
   const sendMessage = useCallback((message: any) => {
     console.log("[WS] Attempting to send message:", message);
@@ -345,24 +363,18 @@ export function useADKWebSocket({
     }
   }, [stopTTS]);
 
-  // Clean up on unmount
+  // Connect when component mounts or when sessionId/connectionId changes
   useEffect(() => {
-    console.log("[WS] Initial connect");
     connect();
-
     return () => {
-      console.log("[WS] Cleaning up WebSocket connection");
-      if (reconnectTimeout.current) {
-        clearTimeout(reconnectTimeout.current);
+      if (pingIntervalRef.current) {
+        clearInterval(pingIntervalRef.current);
       }
       if (ws.current) {
         ws.current.close();
       }
-      if (audioContext.current) {
-        audioContext.current.close();
-      }
     };
-  }, [connect]);
+  }, [connect, sessionId, connectionId]);
 
   // Persist conversation history to localStorage
   useEffect(() => {
@@ -560,6 +572,23 @@ export function useADKWebSocket({
     };
   }, [stopListening]);
 
+  // Function to start a new session
+  const startNewSession = useCallback(() => {
+    const newSessionId = generateSessionId();
+    setSessionId(newSessionId);
+    localStorage.setItem(`currentSession_${connectionId}`, newSessionId);
+    
+    // Clear conversation history for new session
+    conversationHistory.current = [];
+    localStorage.removeItem('conversationHistory');
+    
+    // Reconnect with new session
+    if (ws.current) {
+      ws.current.close();
+    }
+    connect();
+  }, [connectionId, connect, generateSessionId]);
+
   return { 
     sendUserMessage, 
     isConnected, 
@@ -567,7 +596,9 @@ export function useADKWebSocket({
     stopListening, 
     isRecording,
     isAudioEnabled,
-    setIsAudioEnabled: setIsAudioEnabled || (() => {}), // Provide a no-op function if not provided
-    stopTTS // Expose stopTTS function
+    setIsAudioEnabled: setIsAudioEnabled || (() => {}),
+    stopTTS,
+    sessionId,
+    startNewSession
   };
 }

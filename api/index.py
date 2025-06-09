@@ -147,12 +147,12 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_i
                 content_obj = Content(role="user", parts=[Part.from_text(text=full_input)])
 
                 # Store user message in Firebase chat history
-                # firestore_session_service.store_chat_message(
-                #     connection_id=connection_id,
-                #     session_id=session_id,
-                #     role="user",
-                #     content=content  # Including embedding for potential semantic search later
-                # )
+                firestore_session_service.store_chat_message(
+                    connection_id=connection_id,
+                    session_id=session_id,
+                    role="user",
+                    content=content  # Including embedding for potential semantic search later
+                )
 
                 # Set the current connection_id for the agent to use
                 set_current_connection_id(connection_id)

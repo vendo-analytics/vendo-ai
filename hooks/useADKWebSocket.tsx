@@ -186,7 +186,10 @@ export function useADKWebSocket({
 
       socket.onopen = () => {
         console.log("[WS] Connected successfully with session:", sessionId);
-        socket.send(JSON.stringify({ type: "ping", timestamp: Date.now() }));
+        socket.send(JSON.stringify({
+          type: "init",
+          data: "Hello from client!"
+        }));
         setIsConnected(true);
         reconnectAttempts.current = 0;
         
@@ -290,35 +293,38 @@ export function useADKWebSocket({
       setIsConnected(false);
     }
   }, [connectionId, sessionId, onTextMessage, onAudioMessage, onTurnComplete]);
-
-  const sendMessage = useCallback((message: any) => {
+  const waitForSocketOpen = (socket: WebSocket): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (socket.readyState === WebSocket.OPEN) {
+        resolve();
+      } else {
+        socket.addEventListener("open", () => resolve(), { once: true });
+        socket.addEventListener("error", reject, { once: true });
+      }
+    });
+  };
+  const sendMessage = useCallback(async (message: any) => {
+    const socket = ws.current;
     console.log("[WS] Attempting to send message:", message);
-    console.log("[WS] Current WebSocket state:", ws.current?.readyState);
-    console.log("[WS] Current conversation history:", conversationHistory.current);
-
-    if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
-      console.log("[WS] Socket not ready, attempting reconnect before send");
-      connect();
-      // Queue the message to be sent after connection
-      setTimeout(() => {
-        if (ws.current?.readyState === WebSocket.OPEN) {
-          console.log("[WS] Sending queued message:", message);
-          ws.current.send(JSON.stringify(message));
-        } else {
-          console.error("[WS] Failed to send message - socket still not ready, state:", ws.current?.readyState);
-        }
-      }, 1000);
+    console.log("[WS] Current WebSocket state:", socket?.readyState);
+  
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      console.warn("[WS] Socket not ready, waiting for open...");
+  
+      try {
+        await waitForSocketOpen(socket!);
+        console.log("[WS] Socket now open, sending...");
+        socket!.send(JSON.stringify(message));
+      } catch (err) {
+        console.error("[WS] Failed to send, socket did not open:", err);
+      }
+  
       return;
     }
-    
-    try {
-      console.log("[WS] Sending message through WebSocket");
-      ws.current.send(JSON.stringify(message));
-      console.log("[WS] Message sent successfully");
-    } catch (err) {
-      console.error("[WS] Error sending message:", err);
-    }
-  }, [connect]);
+  
+    // ✅ Socket is open, send immediately
+    socket.send(JSON.stringify(message));
+  }, []);
 
   // Add function to stop TTS
   const stopTTS = useCallback(() => {

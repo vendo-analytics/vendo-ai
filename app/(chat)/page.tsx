@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useCallback } from "react"
+import type { Message } from "ai"
 import { Chat } from "@/components/chat"
 import { BusinessContextEditor } from "@/components/business-context-editor"
 import { KnowledgeSidebar } from "@/components/knowledge-sidebar"
@@ -85,6 +86,7 @@ async function deleteDocument(connectionId: string, index: number) {
 export default function Page() {
   const [currentView, setCurrentView] = useState<PageView>("chat")
   const [selectedChatId, setSelectedChatId] = useState<string>("001")
+  const [chatMessages, setChatMessages] = useState<Message[]>([])
   const [selectedEvent, setSelectedEvent] = useState<any>(null)
   const [selectedDocument, setSelectedDocument] = useState<any>(null)
   const [contentRefreshTrigger, setContentRefreshTrigger] = useState(0)
@@ -140,8 +142,9 @@ export default function Page() {
     setCurrentView("chat")
   }
 
-  const handleChatSelect = (chatId: string) => {
+  const handleChatSelect = (chatId: string, messages: Message[]) => {
     setSelectedChatId(chatId);
+    setChatMessages(messages);
     setCurrentView("chat");
   };
 
@@ -177,7 +180,12 @@ export default function Page() {
           </div>
         </header>
         <div className="flex flex-1 flex-col">
-          {currentView === "chat" && <Chat chatId={selectedChatId} />}
+          {currentView === "chat" && (
+            <Chat 
+              chatId={selectedChatId} 
+              initialMessages={chatMessages}
+            />
+          )}
           {currentView === "business-context" && <BusinessContextEditor />}
           {currentView === "events" && <EventsView onSelectEvent={handleSelectEvent} />}
           {currentView === "event-properties" && selectedEvent && <EventProperties event={selectedEvent} />}

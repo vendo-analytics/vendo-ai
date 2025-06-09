@@ -170,35 +170,26 @@ export function useADKWebSocket({
   // Add function to load and replay a session
   const loadSession = useCallback(async (existingSessionId: string) => {
     try {
-      // Fetch messages for this session
+      console.log("[WS] Loading session:", existingSessionId);
       const response = await fetch(`/api/chat/messages?connection_id=${connectionId}&session_id=${existingSessionId}`);
       if (!response.ok) throw new Error("Failed to fetch session messages");
       const messages = await response.json();
       console.log("[WS] Loaded messages:", messages);
 
-      // Update the session ID to continue this conversation
       setSessionId(existingSessionId);
 
-      // Clear any existing messages first
-      onTextMessage("", true, false); // This will trigger a messages clear in the Chat component
-
-      // Replay each message in the conversation
+      // Send each message to be displayed
       messages.forEach((message: any) => {
-        // Call onTextMessage with the appropriate parameters for each message
-        onTextMessage(
-          message.content,
-          true, // is final
-          false, // not partial
-          message.role as "user" | "assistant",
-          message.traceId
-        );
+        if (message.content && message.role) {
+          onTextMessage(
+            message.content,
+            true,  // is final
+            false, // not partial
+            message.role,
+            message.traceId
+          );
+        }
       });
-
-      // Update conversation history
-      conversationHistory.current = messages.map((message: any) => ({
-        role: message.role,
-        content: message.content
-      }));
 
     } catch (error) {
       console.error("Error loading session:", error);
@@ -444,7 +435,9 @@ export function useADKWebSocket({
       saveHistory(); // Save one last time
     };
   }, []);
-
+  const loadSessionMessages = async (messages: Message[]) => {
+    setMessages(messages)
+  }
   const startListening = useCallback(async () => {
     // Extra safety: reset manual stop flag at the start of every recording session
     stoppedManuallyRef.current = false;
@@ -617,15 +610,16 @@ export function useADKWebSocket({
     };
   }, [stopListening]);
 
-  return { 
-    sendUserMessage, 
-    isConnected, 
-    startListening, 
-    stopListening, 
+  return {
+    sendUserMessage,
+    isConnected,
+    startListening,
+    stopListening,
     isRecording,
     isAudioEnabled,
-    setIsAudioEnabled: setIsAudioEnabled || (() => {}), // Provide a no-op function if not provided
+    setIsAudioEnabled: setIsAudioEnabled || (() => {}),
     stopTTS,
-    loadSession
-  };
+    loadSession,
+    loadSessionMessages
+  }
 }

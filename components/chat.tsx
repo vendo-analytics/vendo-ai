@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { PreviewMessage, ThinkingMessage } from "@/components/message"
 import { MultimodalInput } from "@/components/multimodal-input"
 import { Overview } from "@/components/overview"
@@ -13,16 +13,23 @@ import { AudioToggle } from "./AudioToggle"
 
 interface ChatProps {
   chatId?: string;
+  initialMessages?: Message[];
 }
 
-export function Chat({ chatId = "001" }: ChatProps) {
-  const [messages, setMessages] = useState<Message[]>([])
+export function Chat({ chatId = "001", initialMessages = [] }: ChatProps) {
+  const [messages, setMessages] = useState<Message[]>(initialMessages)
   const [input, setInput] = useState<string>("")
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [isAudioEnabled, setIsAudioEnabled] = useState(false)
+  const currentChatRef = useRef<string>(chatId);
 
   // Add ratings hook
   const { toggleRating, getRating } = useMessageRatings()
+
+  // Update messages when initialMessages changes
+  useEffect(() => {
+    setMessages(initialMessages);
+  }, [initialMessages]);
 
   const append = async (message: Message | CreateMessage, chatRequestOptions?: ChatRequestOptions): Promise<string> => {
     setMessages((prev) => [...prev, message as Message])
@@ -33,56 +40,62 @@ export function Chat({ chatId = "001" }: ChatProps) {
     // Optionally implement stop signal over WebSocket later
   }
 
-  const { sendUserMessage, startListening, stopListening, isConnected, isRecording, stopTTS } = useADKWebSocket({
-    onTextMessage: (chunk: string, isFinal = false, isPartial = false, role?: "user" | "assistant", traceId?: string) => {
-      setMessages((prev) => {
-        if (!chunk) return prev
-        const last = prev[prev.length - 1]
-
-        if (role === "user") {
-          if (last?.role === "user") {
-            // Update the last user message
-            return [...prev.slice(0, -1), { ...last, content: chunk }]
-          } else {
-            // Always append a new user message if last is not a user
-            return [
-              ...prev,
-              {
-                id: `user-${Date.now()}`,
-                role: "user",
-                content: chunk,
-              },
-            ]
-          }
-        } else if (role === "assistant") {
-          if (last?.role === "assistant") {
-            // Update the last assistant message
-            return [...prev.slice(0, -1), { ...last, content: chunk, traceId }]
-          } else {
-            // Always append a new assistant message if last is not an assistant
-            return [
-              ...prev,
-              {
-                id: `assistant-${Date.now()}`,
-                role: "assistant",
-                content: chunk,
-                traceId,
-              },
-            ]
-          }
-        }
-
-        return prev
-      })
-
-      if (isFinal) setIsLoading(false)
+  const {
+    sendUserMessage,
+    startListening,
+    stopListening,
+    isConnected,
+    isRecording,
+    stopTTS,
+    loadSession,
+  } = useADKWebSocket({
+    onTextMessage: (content, _isFinal = true, _isPartial = false, role, traceId) => {
+      if (!content || !role) return;
+      if (content.trim() === '') return;
+      
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `${role}-${Date.now()}`,
+          role,
+          content,
+          traceId,
+        },
+      ]);
     },
     onTurnComplete: () => setIsLoading(false),
     isAudioEnabled,
     setIsAudioEnabled,
-  })
+  });
+
+  // Add effect to load chat history when chatId changes
+  useEffect(() => {
+    // Only load if the chatId has actually changed
+    if (chatId !== currentChatRef.current) {
+      const loadChatHistory = async () => {
+        try {
+          setIsLoading(true);
+          // Clear existing messages first
+          setMessages([]);
+          
+          // Load the new chat session
+          await loadSession(chatId);
+          // Update the ref after successful load
+          currentChatRef.current = chatId;
+        } catch (error) {
+          console.error("Error loading chat history:", error);
+          toast.error("Failed to load chat history");
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      loadChatHistory();
+    }
+  }, [chatId, loadSession]);
 
   useEffect(() => {
+    
     if (!isConnected) {
       // Only show error if we've attempted to connect
       console.log("WebSocket not connected - running in demo mode")

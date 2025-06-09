@@ -29,6 +29,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useConnection } from "@/lib/connection-context"
 import { useADKWebSocket } from "@/hooks/useADKWebSocket"
+import type { Message } from "ai"
 
 // Firebase API functions - integrated with your backend
 const fetchFirebaseContent = async (connectionId = "001") => {
@@ -201,7 +202,7 @@ interface KnowledgeSidebarProps {
   selectedEventId?: string
   onContentRefresh: number
   onDocumentClick?: (doc: any) => void
-  onChatSelect?: (chatId: string) => void
+  onChatSelect?: (chatId: string, messages: Message[]) => void
 }
 
 export function KnowledgeSidebar({
@@ -377,15 +378,24 @@ export function KnowledgeSidebar({
 
   const handleChatClick = async (chatId: string) => {
     try {
-      // Load and replay the session
-      await loadSession(chatId);
+      // Load messages first
+      const response = await fetch(`/api/chat/messages?connection_id=${selectedConnectionId}&session_id=${chatId}`);
+      if (!response.ok) throw new Error("Failed to fetch chat messages");
+      const messages = await response.json();
       
-      // Navigate to chat view if needed
+      // Format messages for the Chat component
+      const formattedMessages = messages.map((msg: any) => ({
+        id: `${msg.role}-${new Date(msg.timestamp).getTime()}`,
+        role: msg.role,
+        content: msg.content
+      }));
+
+      // Navigate to chat view
       onNavigate("chat");
       
-      // Call the optional chat select handler
+      // Call the chat select handler with messages
       if (onChatSelect) {
-        onChatSelect(chatId);
+        onChatSelect(chatId, formattedMessages);
       }
     } catch (error) {
       console.error("Error loading chat:", error);
@@ -542,14 +552,11 @@ export function KnowledgeSidebar({
               onClick={() => setIsRecentOpen(!isRecentOpen)}
             >
               {isRecentOpen ? <ChevronDown size={14} className="mr-1" /> : <ChevronRight size={14} className="mr-1" />}
-              Recent
+              Chat History
             </SidebarGroupLabel>
           </div>
 
-          {/* Search Shortcut */}
-          <div className="px-4 py-2 text-xs text-muted-foreground">
-            Press <kbd className="px-1 py-0.5 bg-muted rounded border border-border">k</kbd> to search
-          </div>
+          
 
           {isRecentOpen && (
             <SidebarGroupContent>

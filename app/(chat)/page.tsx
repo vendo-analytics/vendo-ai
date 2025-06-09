@@ -142,11 +142,10 @@ export default function Page() {
     setCurrentView("chat")
   }
 
-  const handleChatSelect = (chatId: string, messages: Message[]) => {
-    setSelectedChatId(chatId);
-    setChatMessages(messages);
-    setCurrentView("chat");
-  };
+  const handleChatSelect = (chatId: string) => {
+    setSelectedChatId(chatId)
+    setCurrentView("chat")
+  }
 
   // New: Data Dictionary selection view
   const renderDataDictionaryMenu = () => (

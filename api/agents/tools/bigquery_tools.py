@@ -87,7 +87,7 @@ def get_bigquery_schema():
             "description": field.description or ""
         })
 
-    print(schema)
+    #print(schema)
     return schema
 
 get_bigquery_schema()

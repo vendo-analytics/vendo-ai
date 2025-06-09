@@ -107,6 +107,7 @@ def get_top_k_context(user_query: str, connection_id: str, k=3, min_similarity=0
         logger.warning(f"[context] Embedding failure: {e}")
         return []
 
+
 @app.websocket("/ws/{session_id}")
 async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_id: str = Query(...)):
     print(f"[INIT] /ws/{session_id}?connection_id={connection_id}")
@@ -122,7 +123,9 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_i
         user_id=connection_id, 
         session_id=session_id  # Use the session_id from frontend
     )
-    
+
+
+
     runner = Runner(app_name=APP_NAME, agent=root_agent, session_service=session_service)
     run_config = RunConfig(response_modalities=["text"])
     organization_id = firestore_session_service.get_connection_info(connection_id).get("organization_id")
@@ -136,15 +139,28 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_i
             msg = await websocket.receive_text()
             print(f"[RECEIVED] {msg}")
             data = json.loads(msg)
+
+            # # Skip pings and other non-data messages
+            if data.get("type") == "ping":
+                continue
+
             content = data.get("data", "")
+            print(f"[CONTENT] {content}")
 
             if not content:
                 continue
                    
             with tracer.start_as_current_span("user_message") as span:
                 #context = get_all_general_context_into_firebase(connection_id)
+                historical_messages = firestore_session_service.get_chat_messages(
+                    connection_id=connection_id,
+                    session_id=session_id
+                )
                 context = ["You are a helpful assistant that can answer questions and help with tasks."]
+                if historical_messages:
+                    context = [msg["content"] for msg in historical_messages if msg.get("content")]
                 full_input = "\n\n".join(context + [content])
+                print(f"[FULL INPUT] {full_input}")
                 content_obj = Content(role="user", parts=[Part.from_text(text=full_input)])
            
 
@@ -175,6 +191,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_i
                 result_text = ""
                 
                 async for event in result:
+                    print(f"[EVENT] {event.content}")
                     # Handle audio events as before
                     is_audio = event.content and event.content.parts and event.content.parts[0].inline_data and event.content.parts[0].inline_data.mime_type.startswith("audio/pcm")
                     
@@ -397,7 +414,7 @@ async def update_business_context(request: dict):
     try:
         connection_id = request.get("connection_id")
         business_context = request.get("business_context")
-        print(f"[DEBUG] NEW Business context: {business_context}", flush=True)
+        #print(f"[DEBUG] NEW Business context: {business_context}", flush=True)
 
         if not connection_id or not business_context:
             return {"error": "connection_id and business_context are required"}, 400
@@ -462,7 +479,7 @@ async def get_events_data(connection_id: str = Query(...)):
             "first_seen": row.first_seen,
             "last_seen": row.last_seen,
         })
-    print(f"[DEBUG] Events: {events}", flush=True)
+    #print(f"[DEBUG] Events: {events}", flush=True)
     return events
 
 @app.get("/api/event-properties")
@@ -474,6 +491,7 @@ async def get_event_details(connection_id: str = Query(...), event_id: str = Non
             SELECT event_name, name, CASE WHEN type = 'nan' THEN 'Unknown' ELSE type END as type, CASE WHEN description = 'nan' THEN 'No description available' ELSE description END as description
             FROM `{dataset_id}.event_properties_data`
             WHERE event_name = @event_id
+            ORDER BY event_name ASC
         """
         job_config = bigquery.QueryJobConfig(
             query_parameters=[
@@ -485,6 +503,7 @@ async def get_event_details(connection_id: str = Query(...), event_id: str = Non
         query = f"""
             SELECT event_name, name, type, description
             FROM `{dataset_id}.event_details`
+            ORDER BY event_name ASC
         """
         results = client.query(query).result()
 
@@ -496,7 +515,7 @@ async def get_event_details(connection_id: str = Query(...), event_id: str = Non
             "type": row.type,
             "description": row.description,
         })
-    print(f"[DEBUG] Properties: {properties}", flush=True)
+    #print(f"[DEBUG] Properties: {properties}", flush=True)
     return properties
 
 @app.get("/api/annotations")
@@ -569,6 +588,7 @@ async def get_user_properties(connection_id: str = Query(...)):
             SELECT event_name, name, CASE WHEN type = 'nan' THEN 'Unknown' ELSE type END as type, CASE WHEN description = 'nan' THEN 'No description available' ELSE description END as description
             FROM `{dataset_id}.event_properties_data`
             WHERE event_name = '$user'
+            ORDER BY name ASC
         """
         results = client.query(query).result()
 
@@ -580,7 +600,7 @@ async def get_user_properties(connection_id: str = Query(...)):
             "type": row.type,
             "description": row.description,
         })
-    print(f"[DEBUG] User Properties: {properties}", flush=True)
+    #print(f"[DEBUG] User Properties: {properties}", flush=True)
     return properties
 
 @app.get("/api/chat/messages")

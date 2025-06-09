@@ -181,7 +181,7 @@ export function useADKWebSocket({
       // Send each message to be displayed
       messages.forEach((message: any) => {
         if (message.content && message.role) {
-          onTextMessage(
+          callbacksRef.current.onTextMessage(
             message.content,
             true,  // is final
             false, // not partial
@@ -190,12 +190,13 @@ export function useADKWebSocket({
           );
         }
       });
+      console.log("[WS] Messages sent:", messages);
 
     } catch (error) {
       console.error("Error loading session:", error);
       toast.error("Failed to load chat session");
     }
-  }, [connectionId, onTextMessage]);
+  }, [connectionId]);
 
   // Modify connect to use the current sessionId
   const connect = useCallback(() => {
@@ -235,7 +236,7 @@ export function useADKWebSocket({
             // Stop any ongoing TTS when receiving a new message
             stopTTS();
             
-            onTextMessage(
+            callbacksRef.current.onTextMessage(
               data.data,
               data.turn_complete,
               data.is_partial,

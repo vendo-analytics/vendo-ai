@@ -378,24 +378,13 @@ export function KnowledgeSidebar({
 
   const handleChatClick = async (chatId: string) => {
     try {
-      // Load messages first
-      const response = await fetch(`/api/chat/messages?connection_id=${selectedConnectionId}&session_id=${chatId}`);
-      if (!response.ok) throw new Error("Failed to fetch chat messages");
-      const messages = await response.json();
-      
-      // Format messages for the Chat component
-      const formattedMessages = messages.map((msg: any) => ({
-        id: `${msg.role}-${new Date(msg.timestamp).getTime()}`,
-        role: msg.role,
-        content: msg.content
-      }));
-
-      // Navigate to chat view
+      await loadSession(chatId); // ✅ THIS is what triggers onTextMessage replay
+  
       onNavigate("chat");
-      
-      // Call the chat select handler with messages
+  
+      // Optional: still call onChatSelect just to update UI state
       if (onChatSelect) {
-        onChatSelect(chatId, formattedMessages);
+        onChatSelect(chatId, []); // You don’t need to send messages anymore
       }
     } catch (error) {
       console.error("Error loading chat:", error);

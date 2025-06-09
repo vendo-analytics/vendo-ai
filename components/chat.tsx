@@ -54,13 +54,13 @@ export function Chat({ chatId = "001", initialMessages = [] }: ChatProps) {
       if (content.trim() === '') return;
       
       setMessages((prev) => [
-        ...prev,
-        {
+              ...prev,
+              {
           id: `${role}-${Date.now()}`,
           role,
           content,
-          traceId,
-        },
+                traceId,
+              },
       ]);
     },
     onTurnComplete: () => setIsLoading(false),

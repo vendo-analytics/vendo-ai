@@ -44,7 +44,7 @@ from .state_manager import get_current_connection_id  ## don't work on debugger
 
 
 ## debug mode
-debug = False  # True = on, False = off
+debug = True  # True = on, False = off
 
 
 def setup_before_agent_call(callback_context: CallbackContext):
@@ -68,7 +68,6 @@ def setup_before_agent_call(callback_context: CallbackContext):
     callback_context.state["user_property_schema"] = get_user_properties()
     callback_context.state["event_schema"] = get_events()
     callback_context.state["event_dataset"] = f"gam-dwh.{business_context['dataset_id']}.mixpanel_all_data_export"
-
     #TODO: Add more Context Tables
 
 

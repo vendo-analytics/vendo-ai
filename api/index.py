@@ -384,6 +384,7 @@ async def get_events_data(connection_id: str = Query(...)):
         SELECT id, name, description, source, status, count, change, first_seen, last_seen
         FROM `{dataset_id}.events_data`
         where name != '$user'
+        order by name asc
     """
     results = client.query(query).result()
     events = []
@@ -411,6 +412,7 @@ async def get_event_details(connection_id: str = Query(...), event_id: str = Non
             SELECT event_name, name, CASE WHEN type = 'nan' THEN 'Unknown' ELSE type END as type, CASE WHEN description = 'nan' THEN 'No description available' ELSE description END as description
             FROM `{dataset_id}.event_properties_data`
             WHERE event_name = @event_id
+            order by name asc
         """
         job_config = bigquery.QueryJobConfig(
             query_parameters=[
@@ -422,6 +424,7 @@ async def get_event_details(connection_id: str = Query(...), event_id: str = Non
         query = f"""
             SELECT event_name, name, type, description
             FROM `{dataset_id}.event_details`
+            order by name asc
         """
         results = client.query(query).result()
 
@@ -506,6 +509,7 @@ async def get_user_properties(connection_id: str = Query(...)):
             SELECT event_name, name, CASE WHEN type = 'nan' THEN 'Unknown' ELSE type END as type, CASE WHEN description = 'nan' THEN 'No description available' ELSE description END as description
             FROM `{dataset_id}.event_properties_data`
             WHERE event_name = '$user'
+            ORDER BY name ASC
         """
         results = client.query(query).result()
 

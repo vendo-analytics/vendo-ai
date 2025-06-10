@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import type { Message } from "ai"
 import { Chat } from "@/components/chat"
 import { BusinessContextEditor } from "@/components/business-context-editor"
@@ -90,9 +90,28 @@ export default function Page() {
   const [selectedEvent, setSelectedEvent] = useState<any>(null)
   const [selectedDocument, setSelectedDocument] = useState<any>(null)
   const [contentRefreshTrigger, setContentRefreshTrigger] = useState(0)
-  
+  const [isDebugMode, setIsDebugMode] = useState(false)
+
   // Use the connection context
   const connectionId = useConnectionId()
+
+  // Fetch initial debug mode state
+  useEffect(() => {
+    const fetchDebugMode = async () => {
+      try {
+        const response = await fetch(`/api/debug-mode?connection_id=${connectionId}`)
+        if (!response.ok) throw new Error("Failed to fetch debug mode")
+        const data = await response.json()
+        setIsDebugMode(data.debug_mode)
+      } catch (error) {
+        console.error("Failed to fetch debug mode:", error)
+      }
+    }
+    
+    if (connectionId) {
+      fetchDebugMode()
+    }
+  }, [connectionId])
 
   const getPageTitle = () => {
     switch (currentView) {
@@ -147,6 +166,33 @@ export default function Page() {
     setCurrentView("chat")
   }
 
+  const toggleDebugMode = async () => {
+    try {
+      const newValue = !isDebugMode
+      const response = await fetch("/api/debug-mode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          connection_id: connectionId,
+          debug_mode: newValue
+        })
+      })
+      
+      if (!response.ok) throw new Error("Failed to update debug mode")
+      
+      setIsDebugMode(newValue)
+      console.log(`Debug mode ${newValue ? "enabled" : "disabled"}`)
+      if (newValue) {
+        toast.success("Debug mode enabled")
+      } else {
+        toast.success("Debug mode disabled")
+      }
+    } catch (error) {
+      console.error("Failed to toggle debug mode:", error)
+      toast.error("Failed to toggle debug mode")
+    }
+  }
+
   // New: Data Dictionary selection view
   const renderDataDictionaryMenu = () => (
     <div className="flex flex-col gap-4 p-8">
@@ -174,10 +220,33 @@ export default function Page() {
           <CustomSidebarTrigger />
           <Separator orientation="vertical" className="mr-2 h-4" />
           <h1 className="text-xl font-bold">{getPageTitle()}</h1>
-          <div className="ml-auto hidden md:block">
-            <Navbar />
+          {/* Debug Toggle in Header */}
+          <div className="ml-auto flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Debug</span>
+              <button
+                onClick={toggleDebugMode}
+                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${
+                  isDebugMode ? "bg-orange-500" : "bg-gray-200"
+                }`}
+                role="switch"
+                aria-checked={isDebugMode}
+                aria-label="Toggle debug mode"
+              >
+                <span
+                  className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
+                    isDebugMode ? "translate-x-5" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className="hidden md:block">
+              <Navbar />
+            </div>
           </div>
         </header>
+          
         <div className="flex flex-1 flex-col">
           {currentView === "chat" && (
             <Chat 

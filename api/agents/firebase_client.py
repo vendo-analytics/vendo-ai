@@ -178,6 +178,7 @@ class FirestoreSessionService(BaseSessionService):
         """
         Retrieve chat messages for a specific session
         """
+        print(f"[DEBUG] Getting chat messages for connection_id: {connection_id}, session_id: {session_id}", flush=True)
         chat_ref = self.collection.document(connection_id)\
             .collection("chat_history")\
             .document("messages")

@@ -40,20 +40,29 @@ from .business_data.schemas_v2 import (
     get_events
 )
 from .business_data.annotation import get_annotations  ## don't work on debugger
-from .state_manager import get_current_connection_id  ## don't work on debugger
-
+from .state_manager import (
+    get_current_connection_id, 
+    get_current_session_id,
+    get_debug_mode
+)  ## don't work on debugger
+from .firestore_instance import firestore_session_service
 
 ## debug mode
-debug = True  # True = on, False = off
-
+debug = get_debug_mode()  # True = on, False = off
 
 def setup_before_agent_call(callback_context: CallbackContext):
     """Setup the agent with client information."""
 
-    # Get the current connection_id from state_manager (set by WebSocket endpoint)
-    #connection_id = get_current_connection_id()
-    connection_id = "gb1uauyn0Khjcs4Fgxh8"        #TODO: added this for testing with ADK
+    # Get the current connection_id and session_id from state_manager
+    connection_id = get_current_connection_id()
+    session_id = get_current_session_id()
+    
     callback_context.state["connection_id"] = connection_id
+    callback_context.state["session_id"] = session_id
+
+    # Get debug mode from state manager
+    debug_mode = get_debug_mode()
+    callback_context.state["debug_mode"] = debug_mode
 
     # Load client information into session state 
     business_context = get_info(connection_id)
@@ -93,7 +102,9 @@ root_agent = Agent(
         f"""
         You are a Data Science and Data Analytics Multi Agent System.
         - Today's date: {get_today_date()}\n    
-        - How to handle routing escalation: {get_routing_escalation_rules()}
+        
+        - Chat history (this can be used to answer questions): {firestore_session_service.get_chat_messages(connection_id=get_current_connection_id(),session_id=get_current_session_id)}
+        - Context: {firestore_session_service.get_all_general_context(get_current_connection_id())}
         - Always assume the context in the business context information is correct and do not confirm with the customer. i.e currency, business name, data set id, etc.
         """  
         #  How to use annotations: {get_annotation_context()}

@@ -25,7 +25,7 @@ from .tts_service import router as tts_router
 from google.adk.sessions import InMemorySessionService
 from .agents.firestore_instance import firestore_session_service
 from google.adk.agents.callback_context import CallbackContext
-from .agents.state_manager import set_current_connection_id, get_current_connection_id
+from .agents.state_manager import set_current_connection_id, get_current_connection_id, set_debug_mode, get_debug_mode, set_current_session_id, get_current_session_id
 from google.cloud import bigquery
 from fastapi.responses import JSONResponse
 from .agents.mixpanel_client import MixpanelClient
@@ -124,6 +124,10 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_i
         session_id=session_id  # Use the session_id from frontend
     )
 
+    # Set the current connection_id for the agent to use
+    set_current_connection_id(connection_id)
+    set_current_session_id(session_id)
+
 
 
     runner = Runner(app_name=APP_NAME, agent=root_agent, session_service=session_service)
@@ -151,17 +155,9 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_i
                 continue
                    
             with tracer.start_as_current_span("user_message") as span:
-                #context = get_all_general_context_into_firebase(connection_id)
-                historical_messages = firestore_session_service.get_chat_messages(
-                    connection_id=connection_id,
-                    session_id=session_id
-                )
-                context = ["You are a helpful assistant that can answer questions and help with tasks."]
-                if historical_messages:
-                    context = [msg["content"] for msg in historical_messages if msg.get("content")]
-                full_input = "\n\n".join(context + [content])
-                print(f"[FULL INPUT] {full_input}")
-                content_obj = Content(role="user", parts=[Part.from_text(text=full_input)])
+                
+
+                content_obj = Content(role="user", parts=[Part.from_text(text=content)])
            
 
                 # Store user message in Firebase chat history
@@ -172,19 +168,29 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_i
                     content=content  # Including embedding for potential semantic search later
                 )
 
-                # Set the current connection_id for the agent to use
-                set_current_connection_id(connection_id)
+                
+                
+                # Get debug mode from state manager
+                debug_mode = get_debug_mode()
+                print(f"[DEBUG MODE] {debug_mode}")
+                
+                # Configure agent with debug mode
+                run_config = RunConfig(
+                    response_modalities=["text"] # Pass debug mode to agent
+                )
+                
                 result = runner.run_async(
                     session_id=session_id, 
                     user_id=connection_id, 
-                    new_message=content_obj
+                    new_message=content_obj,
+                    run_config=run_config
                 )
                 
-                span.set_attribute("input", full_input)
+                span.set_attribute("input", content)
                 span.set_attribute("user_id", connection_id)
                 span.set_attribute("organization_id", organization_id)
                 span.set_attribute("message_type", "user")
-                input_token_count = len(full_input) // 4
+                input_token_count = len(content) // 4
                 span.set_attribute("gen_ai.usage.prompt_tokens", input_token_count)
                 span.set_attribute("gen_ai.response.model", "gemini-2.0-flash")
 
@@ -617,4 +623,26 @@ async def get_chat_messages(
         return messages
     except Exception as e:
         logger.error(f"[GET /chat/messages] {e}")
+        return {"error": str(e)}, 500
+
+@app.get("/api/debug-mode")
+async def get_debug_mode_endpoint():
+    try:
+        return {"debug_mode": get_debug_mode()}
+    except Exception as e:
+        logger.error(f"[GET /debug-mode] {e}")
+        return {"error": str(e)}, 500
+
+@app.post("/api/debug-mode")
+async def set_debug_mode_endpoint(request: dict):
+    try:
+        debug_mode = request.get("debug_mode")
+        
+        if debug_mode is None:
+            return {"error": "debug_mode is required"}, 400
+
+        set_debug_mode(debug_mode)
+        return {"success": True, "message": f"Debug mode set to {debug_mode}"}
+    except Exception as e:
+        logger.error(f"[POST /debug-mode] {e}")
         return {"error": str(e)}, 500

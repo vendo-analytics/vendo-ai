@@ -11,7 +11,7 @@ from .tools import (
 from google.adk.agents import Agent
 
 from .prompt import data_retrieval_prompt
-debug = False  # True = on, False = off
+debug =  os.getenv("DEBUG_MODE", "false").lower() == "true"  # True = on, False = off
 
 from dotenv import load_dotenv
 load_dotenv()

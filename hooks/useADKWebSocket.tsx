@@ -611,6 +611,23 @@ export function useADKWebSocket({
     };
   }, [stopListening]);
 
+  // Add function to create a new session
+  const createNewSession = useCallback(() => {
+    const newSessionId = generateSessionId();
+    setSessionId(newSessionId);
+    conversationHistory.current = [];
+    
+    // Close existing connection if any
+    if (ws.current) {
+      ws.current.close();
+    }
+    
+    // Connect with new session ID
+    connect();
+    
+    return newSessionId;
+  }, [connect]);
+
   return {
     sendUserMessage,
     isConnected,
@@ -621,6 +638,7 @@ export function useADKWebSocket({
     setIsAudioEnabled: setIsAudioEnabled || (() => {}),
     stopTTS,
     loadSession,
-    loadSessionMessages
+    loadSessionMessages,
+    createNewSession
   }
 }

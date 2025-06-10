@@ -230,6 +230,7 @@ export function KnowledgeSidebar({
   const [isTodayOpen, setIsTodayOpen] = useState(true)
   const [isPrevious7DaysOpen, setIsPrevious7DaysOpen] = useState(true)
   const [isPrevious30DaysOpen, setIsPrevious30DaysOpen] = useState(true)
+  const [selectedChatId, setSelectedChatId] = useState<string | null>(null)
 
   // Replace mock chat history with state from Firebase
   const [chatHistory, setChatHistory] = useState<{
@@ -246,7 +247,7 @@ export function KnowledgeSidebar({
   const { selectedConnectionId, setSelectedConnectionId, companies } = useConnection()
 
   // Get the WebSocket hook context
-  const { loadSession } = useADKWebSocket({
+  const { loadSession, createNewSession } = useADKWebSocket({
     onTextMessage: (text, isFinal, isPartial, role) => {
       // Handle replayed messages
       // You might want to pass this up to the parent component
@@ -378,17 +379,35 @@ export function KnowledgeSidebar({
 
   const handleChatClick = async (chatId: string) => {
     try {
-      await loadSession(chatId); // ✅ THIS is what triggers onTextMessage replay
-  
+      setSelectedChatId(chatId);
+      await loadSession(chatId);
       onNavigate("chat");
-  
-      // Optional: still call onChatSelect just to update UI state
+      
+      // Refresh chat history after loading a chat
+      const history = await fetchChatHistory(selectedConnectionId);
+      setChatHistory(history);
+      
       if (onChatSelect) {
-        onChatSelect(chatId, []); // You don’t need to send messages anymore
+        onChatSelect(chatId, []);
       }
     } catch (error) {
       console.error("Error loading chat:", error);
       toast.error("Failed to load chat session");
+    }
+  };
+
+  const handleNewChat = async () => {
+    try {
+      const newSessionId = createNewSession();
+      setSelectedChatId(null);
+      onNavigate("chat");
+      
+      if (onChatSelect) {
+        onChatSelect(newSessionId, []);
+      }
+    } catch (error) {
+      console.error("Error creating new chat:", error);
+      toast.error("Failed to create new chat");
     }
   };
 
@@ -421,7 +440,10 @@ export function KnowledgeSidebar({
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton onClick={() => onNavigate("chat")} isActive={currentView === "chat"}>
+                <SidebarMenuButton 
+                  onClick={handleNewChat} 
+                  isActive={currentView === "chat" && !selectedChatId}
+                >
                   <MessageCircle size={16} />
                   <span>Chat</span>
                 </SidebarMenuButton>
@@ -535,19 +557,9 @@ export function KnowledgeSidebar({
 
         {/* Chat History Section */}
         <SidebarGroup>
-          <div className="flex items-center justify-between px-2">
-            <SidebarGroupLabel
-              className="py-0 cursor-pointer flex items-center"
-              onClick={() => setIsRecentOpen(!isRecentOpen)}
-            >
-              {isRecentOpen ? <ChevronDown size={14} className="mr-1" /> : <ChevronRight size={14} className="mr-1" />}
-              Chat History
-            </SidebarGroupLabel>
-          </div>
+          <div className="border-t border-border/50 mt-2 pt-2">
+            <SidebarGroupLabel className="px-2">Chat History</SidebarGroupLabel>
 
-          
-
-          {isRecentOpen && (
             <SidebarGroupContent>
               {/* Today's Chats */}
               <div className="px-4 py-1">
@@ -567,7 +579,9 @@ export function KnowledgeSidebar({
                     {chatHistory.today.map((chat) => (
                       <div
                         key={chat.id}
-                        className="flex items-center justify-between py-1 px-2 hover:bg-muted/50 rounded-md cursor-pointer group"
+                        className={`flex items-center justify-between py-1 px-2 hover:bg-muted/50 rounded-md cursor-pointer group ${
+                          selectedChatId === chat.id ? 'bg-muted' : ''
+                        }`}
                         onClick={() => handleChatClick(chat.id)}
                       >
                         <div className="text-sm truncate">{chat.title}</div>
@@ -596,7 +610,9 @@ export function KnowledgeSidebar({
                     {chatHistory.previous7Days.map((chat) => (
                       <div
                         key={chat.id}
-                        className="flex items-center justify-between py-1 px-2 hover:bg-muted/50 rounded-md cursor-pointer group"
+                        className={`flex items-center justify-between py-1 px-2 hover:bg-muted/50 rounded-md cursor-pointer group ${
+                          selectedChatId === chat.id ? 'bg-muted' : ''
+                        }`}
                         onClick={() => handleChatClick(chat.id)}
                       >
                         <div className="text-sm truncate">{chat.title}</div>
@@ -625,7 +641,9 @@ export function KnowledgeSidebar({
                     {chatHistory.previous30Days.map((chat) => (
                       <div
                         key={chat.id}
-                        className="flex items-center justify-between py-1 px-2 hover:bg-muted/50 rounded-md cursor-pointer group"
+                        className={`flex items-center justify-between py-1 px-2 hover:bg-muted/50 rounded-md cursor-pointer group ${
+                          selectedChatId === chat.id ? 'bg-muted' : ''
+                        }`}
                         onClick={() => handleChatClick(chat.id)}
                       >
                         <div className="text-sm truncate">{chat.title}</div>
@@ -636,7 +654,7 @@ export function KnowledgeSidebar({
                 )}
               </div>
             </SidebarGroupContent>
-          )}
+          </div>
         </SidebarGroup>
       </SidebarContent>
     </Sidebar>

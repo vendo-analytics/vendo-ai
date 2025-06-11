@@ -464,67 +464,67 @@ async def get_current_connection():
         logger.error(f"[GET /current-connection] {e}")
         return {"error": str(e)}, 500
 
-@app.get("/api/events-data")
-async def get_events_data(connection_id: str = Query(...)):
-    client = bigquery.Client()
-    dataset_id = firestore_session_service.get_mixpanel_dataset_id(connection_id)
-    query = f"""
-        SELECT id, name, description, source, status, count, change, first_seen, last_seen
-        FROM `{dataset_id}.events_data`
-        where name != '$user'
-    """
-    results = client.query(query).result()
-    events = []
-    for row in results:
-        events.append({
-            "id": row.id,
-            "name": row.name,
-            "description": row.description,
-            "source": row.source,
-            "status": row.status,
-            "count": row.count,
-            "change": row.change,
-            "first_seen": row.first_seen,
-            "last_seen": row.last_seen,
-        })
-    #print(f"[DEBUG] Events: {events}", flush=True)
-    return events
+# @app.get("/api/events-data")
+# async def get_events_data(connection_id: str = Query(...)):
+#     client = bigquery.Client()
+#     dataset_id = firestore_session_service.get_mixpanel_dataset_id(connection_id)
+#     query = f"""
+#         SELECT id, name, description, source, status, count, change, first_seen, last_seen
+#         FROM `{dataset_id}.events_data`
+#         where name != '$user'
+#     """
+#     results = client.query(query).result()
+#     events = []
+#     for row in results:
+#         events.append({
+#             "id": row.id,
+#             "name": row.name,
+#             "description": row.description,
+#             "source": row.source,
+#             "status": row.status,
+#             "count": row.count,
+#             "change": row.change,
+#             "first_seen": row.first_seen,
+#             "last_seen": row.last_seen,
+#         })
+#     #print(f"[DEBUG] Events: {events}", flush=True)
+#     return events
 
-@app.get("/api/event-properties")
-async def get_event_details(connection_id: str = Query(...), event_id: str = None):
-    client = bigquery.Client()
-    dataset_id = firestore_session_service.get_mixpanel_dataset_id(connection_id)
-    if event_id:
-        query = f"""
-            SELECT event_name, name, CASE WHEN type = 'nan' THEN 'Unknown' ELSE type END as type, CASE WHEN description = 'nan' THEN 'No description available' ELSE description END as description
-            FROM `{dataset_id}.event_properties_data`
-            WHERE event_name = @event_id
-            ORDER BY event_name ASC
-        """
-        job_config = bigquery.QueryJobConfig(
-            query_parameters=[
-                bigquery.ScalarQueryParameter("event_id", "STRING", event_id)
-            ]
-        )
-        results = client.query(query, job_config=job_config).result()
-    else:
-        query = f"""
-            SELECT event_name, name, type, description
-            FROM `{dataset_id}.event_details`
-            ORDER BY event_name ASC
-        """
-        results = client.query(query).result()
+# @app.get("/api/event-properties")
+# async def get_event_details(connection_id: str = Query(...), event_id: str = None):
+#     client = bigquery.Client()
+#     dataset_id = firestore_session_service.get_mixpanel_dataset_id(connection_id)
+#     if event_id:
+#         query = f"""
+#             SELECT event_name, name, CASE WHEN type = 'nan' THEN 'Unknown' ELSE type END as type, CASE WHEN description = 'nan' THEN 'No description available' ELSE description END as description
+#             FROM `{dataset_id}.event_properties_data`
+#             WHERE event_name = @event_id
+#             ORDER BY event_name ASC
+#         """
+#         job_config = bigquery.QueryJobConfig(
+#             query_parameters=[
+#                 bigquery.ScalarQueryParameter("event_id", "STRING", event_id)
+#             ]
+#         )
+#         results = client.query(query, job_config=job_config).result()
+#     else:
+#         query = f"""
+#             SELECT event_name, name, type, description
+#             FROM `{dataset_id}.event_details`
+#             ORDER BY event_name ASC
+#         """
+#         results = client.query(query).result()
 
-    properties = []
-    for row in results:
-        properties.append({
-            "event_name": row.event_name,
-            "name": row.name,
-            "type": row.type,
-            "description": row.description,
-        })
-    #print(f"[DEBUG] Properties: {properties}", flush=True)
-    return properties
+#     properties = []
+#     for row in results:
+#         properties.append({
+#             "event_name": row.event_name,
+#             "name": row.name,
+#             "type": row.type,
+#             "description": row.description,
+#         })
+#     #print(f"[DEBUG] Properties: {properties}", flush=True)
+#     return properties
 
 @app.get("/api/annotations")
 async def get_annotations(connection_id: str = Query(...)):
@@ -587,29 +587,88 @@ async def post_feedback(request: Request):
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+@app.put("/api/user-properties/update")
+async def update_user_property(
+    connection_id: str = Query(...),
+    property_name: str = Query(...),
+    description: str = Query(...),
+    type: str = Query(...)
+):
+    try:
+        print(f"[DEBUG] Updating user property: {property_name} for connection {connection_id}")
+        print(f"[DEBUG] New values - description: {description}, type: {type}")
+        
+        # Load or initialize user_edits
+        user_properties_edits = firestore_session_service.get_mixpanel_user_properties_edits(connection_id)
+        print(f"[DEBUG] Current user edits: {user_properties_edits}")
+        
+        if user_properties_edits is None:
+            print("[DEBUG] No existing edits found, initializing empty dict")
+            user_properties_edits = {}
+        
+        # Update property description and type
+        user_properties_edits[property_name] = {
+            "description": description,
+            "type": type
+        }
+        print(f"[DEBUG] Updated user edits: {user_properties_edits}")
+        
+        # Save user edits
+        success = firestore_session_service.update_mixpanel_user_properties_edits(connection_id, user_properties_edits)
+        if not success:
+            print("[ERROR] Failed to update user edits in Firebase")
+            raise HTTPException(status_code=500, detail="Failed to update user edits in Firebase")
+        
+        print("[DEBUG] Successfully updated user property")
+        return {"success": True}
+    
+    except Exception as e:
+        print(f"[ERROR] Failed to update user property: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/user-properties")
 async def get_user_properties(connection_id: str = Query(...)):
-    client = bigquery.Client()
-    dataset_id = firestore_session_service.get_mixpanel_dataset_id(connection_id)
-    if dataset_id:
+    try:
+        client = bigquery.Client()
+        dataset_id = firestore_session_service.get_mixpanel_dataset_id(connection_id)
+        if not dataset_id:
+            raise HTTPException(status_code=404, detail="Dataset not found for connection")
+
+        # Load raw user properties from BigQuery
         query = f"""
-            SELECT event_name, name, CASE WHEN type = 'nan' THEN 'Unknown' ELSE type END as type, CASE WHEN description = 'nan' THEN 'No description available' ELSE description END as description
+            SELECT event_name, name, 
+                   CASE WHEN type = 'nan' THEN 'Unknown' ELSE type END as type,
+                   CASE WHEN description = 'nan' THEN 'No description available' ELSE description END as description,
+                   sample_value
             FROM `{dataset_id}.event_properties_data`
             WHERE event_name = '$user'
             ORDER BY name ASC
         """
         results = client.query(query).result()
 
-    properties = []
-    for row in results:
-        properties.append({
-            "event_name": row.event_name,
-            "name": row.name,
-            "type": row.type,
-            "description": row.description,
-        })
-    #print(f"[DEBUG] User Properties: {properties}", flush=True)
-    return properties
+        # Load user edits from Firebase
+        user_properties_edits = firestore_session_service.get_mixpanel_user_properties_edits(connection_id) or {}
+
+        # Merge edits with raw
+        properties = []
+        for row in results:
+            prop_name = row.name
+            merged = {
+                "event_name": row.event_name,
+                "name": prop_name,
+                "type": user_properties_edits.get(prop_name, {}).get("type", row.type),
+                "description": user_properties_edits.get(prop_name, {}).get("description", row.description),
+                "sample_value": row.sample_value
+            }
+            properties.append(merged)
+
+        print(f"[DEBUG] Merged User Properties: {properties}", flush=True)
+        return properties
+
+    except Exception as e:
+        print(f"[ERROR] Failed to get user properties: {str(e)}", flush=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/chat/messages")
 async def get_chat_messages(
@@ -651,50 +710,75 @@ async def set_debug_mode_endpoint(request: dict):
         return {"error": str(e)}, 500
 
 
-@app.get("/api/vendo-schema")
-async def get_data_dictionary(connection_id: str = "001"):
+@app.get("/api/mixpanel-event-schema")
+async def get_mixpanel_event_schema(connection_id: str = "001"):
     """
-    Get data dictionary from Firebase for a specific connection.
+    Get merged Mixpanel Event Schema (raw + user edits) from Firebase for a specific connection.
     Events and their properties are sorted alphabetically.
     
     Args:
-        connection_id (str): The connection ID to fetch data dictionary for
+        connection_id (str): The connection ID to fetch Mixpanel Event Schema for
         
     Returns:
-        dict: Sorted data dictionary from Firebase
+        dict: Merged and sorted Mixpanel Event Schema
     """
     try:
-        data_dictionary = firestore_session_service.get_data_dictionary_from_firebase(connection_id)
-        if data_dictionary is None:
-            raise HTTPException(status_code=404, detail="Data dictionary not found")
+        raw_schema = firestore_session_service.get_mixpanel_event_schema(connection_id) or {"events": {}}
+        user_edits = firestore_session_service.get_mixpanel_event_schema_edits(connection_id) or {"events": {}}
         
-        # Sort events alphabetically
+        # Merge schemas
+        merged_schema = {"events": {}}
+        for event_name, event_data in raw_schema.get("events", {}).items():
+            merged_event = dict(event_data)  # shallow copy
+            user_event = user_edits.get("events", {}).get(event_name, {})
+
+            # Override event-level description if edited
+            if "description" in user_event:
+                merged_event["description"] = user_event["description"]
+
+            # Merge properties
+            merged_event["properties"] = {}
+            for prop_name, prop_data in event_data.get("properties", {}).items():
+                merged_prop = dict(prop_data)
+                user_prop = user_event.get("properties", {}).get(prop_name, {})
+
+                if "description" in user_prop:
+                    merged_prop["description"] = user_prop["description"]
+                if "data_type" in user_prop:
+                    merged_prop["data_type"] = user_prop["data_type"]
+
+                merged_event["properties"][prop_name] = merged_prop
+
+            merged_schema["events"][event_name] = merged_event
+
+        # Optional: bring over summary if needed
+        if "summary" in raw_schema:
+            merged_schema["summary"] = raw_schema["summary"]
+
+        # Sort the events and their properties alphabetically
         sorted_events = {}
-        for event_name in sorted(data_dictionary.get("events", {}).keys()):
-            event_data = data_dictionary["events"][event_name]
-            
-            # Sort properties alphabetically if they exist
+        for event_name in sorted(merged_schema.get("events", {})):
+            event_data = merged_schema["events"][event_name]
             if "properties" in event_data:
-                sorted_properties = {}
-                for prop_name in sorted(event_data["properties"].keys()):
-                    sorted_properties[prop_name] = event_data["properties"][prop_name]
-                event_data["properties"] = sorted_properties
-            
+                event_data["properties"] = {
+                    k: event_data["properties"][k]
+                    for k in sorted(event_data["properties"].keys())
+                }
             sorted_events[event_name] = event_data
-        
-        # Create new dictionary with sorted events and preserve summary
-        sorted_data_dictionary = {
-            "summary": data_dictionary.get("summary", {}),
+
+        sorted_schema = {
+            "summary": merged_schema.get("summary", {}),
             "events": sorted_events
         }
-        
-        print(f"[DEBUG] Sorted data dictionary: {sorted_data_dictionary}", flush=True)
-        return sorted_data_dictionary
+
+        print(f"[DEBUG] Merged & Sorted Schema: {sorted_schema}", flush=True)
+        return sorted_schema
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.put("/api/vendo-schema/update")
-async def update_schema(
+@app.put("/api/mixpanel-event-schema/update")
+async def update_mixpanel_event_schema(
     connection_id: str,
     event_name: str,
     property_name: Optional[str] = None,
@@ -702,42 +786,32 @@ async def update_schema(
     data_type: Optional[str] = None
 ):
     try:
-        # Get the current data dictionary
-        current_dict = firestore_session_service.get_data_dictionary_from_firebase(connection_id)
-        if current_dict is None:
-            current_dict = {"events": {}}
+        # Load or initialize user_edits
+        mixpanel_event_schema_edits = firestore_session_service.get_mixpanel_event_schema_edits(connection_id)
+        if mixpanel_event_schema_edits is None:
+            mixpanel_event_schema_edits = {"events": {}}
         
-        # Ensure events dictionary exists
-        if "events" not in current_dict:
-            current_dict["events"] = {}
+        # Ensure event structure exists
+        event = mixpanel_event_schema_edits["events"].setdefault(event_name, {"properties": {}})
         
-        # If property_name is provided, update property description/type
+        # If editing a property description/type
         if property_name:
-            if event_name not in current_dict["events"]:
-                current_dict["events"][event_name] = {"properties": {}}
-            if "properties" not in current_dict["events"][event_name]:
-                current_dict["events"][event_name]["properties"] = {}
-                
-            if property_name not in current_dict["events"][event_name]["properties"]:
-                current_dict["events"][event_name]["properties"][property_name] = {}
-                
+            prop = event["properties"].setdefault(property_name, {})
             if description is not None:
-                current_dict["events"][event_name]["properties"][property_name]["description"] = description
+                prop["description"] = description
             if data_type is not None:
-                current_dict["events"][event_name]["properties"][property_name]["data_type"] = data_type
-        # Otherwise, update event description
+                prop["data_type"] = data_type
+        # If editing event description
         else:
-            if event_name not in current_dict["events"]:
-                current_dict["events"][event_name] = {"properties": {}}
             if description is not None:
-                current_dict["events"][event_name]["description"] = description
+                event["description"] = description
         
-        # Update the entire data dictionary in Firebase
-        success = firestore_session_service.update_data_dictionary(connection_id, current_dict)
+        # Save user edits only
+        success = firestore_session_service.update_mixpanel_event_schema_edits(connection_id, mixpanel_event_schema_edits)
         if not success:
-            raise HTTPException(status_code=500, detail="Failed to update data dictionary")
+            raise HTTPException(status_code=500, detail="Failed to update user edits")
         
         return {"success": True}
-        
+    
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) 
+        raise HTTPException(status_code=500, detail=str(e))

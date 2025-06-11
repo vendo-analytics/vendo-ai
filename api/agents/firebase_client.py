@@ -386,15 +386,15 @@ class FirestoreSessionService(BaseSessionService):
             print(f"[ERROR] Failed to get connection info from Firebase for user {connection_id}: {str(e)}", flush=True)
             return None
         
-    def get_data_dictionary_from_firebase(self, connection_id: str = "001"):
+    def get_mixpanel_event_schema(self, connection_id: str = "001"):
         """
-        Get data dictionary from Firebase for a specific connection.
+        Get Mixpanel Event Schema from Firebase for a specific connection.
         
         Args:
-            connection_id (str): The connection ID to fetch data dictionary for
+            connection_id (str): The connection ID to fetch Mixpanel Event Schema for
             
         Returns:
-            Optional[Dict[str, Any]]: Data dictionary from Firebase or None if not found
+            Optional[Dict[str, Any]]: Mixpanel Event Schema from Firebase or None if not found
         """
         try:
             # Get user document
@@ -402,30 +402,63 @@ class FirestoreSessionService(BaseSessionService):
             
             if user_doc.exists:
                 user_data = user_doc.to_dict()
-                data_dictionary = user_data.get("data_dictionary")
-                print(f"[DEBUG] Data dictionary: {data_dictionary}", flush=True)
+                mixpanel_event_schema = user_data.get("mixpanel_event_schema")
+                print(f"[DEBUG] Mixpanel Event Schema: {mixpanel_event_schema}", flush=True)
                 
-                if data_dictionary and isinstance(data_dictionary, dict):
-                    print(f"[DEBUG] Successfully loaded data_dictionary for connection {connection_id}", flush=True)
-                    return data_dictionary
+                if mixpanel_event_schema and isinstance(mixpanel_event_schema, dict):
+                    print(f"[DEBUG] Successfully loaded Mixpanel Event Schema for connection {connection_id}", flush=True)
+                    return mixpanel_event_schema
                 else:
-                    print(f"[DEBUG] No data_dictionary found for connection {connection_id}", flush=True)
+                    print(f"[DEBUG] No Mixpanel Event Schema found for connection {connection_id}", flush=True)
                     return None
             else:
                 print(f"[DEBUG] Connection {connection_id} not found in Firebase", flush=True)
                 return None
                 
         except Exception as e:
-            print(f"[ERROR] Failed to get data dictionary from Firebase: {str(e)}", flush=True)
+            print(f"[ERROR] Failed to get Mixpanel Event Schema from Firebase: {str(e)}", flush=True)
             return None
-
-    def update_data_dictionary(self, connection_id: str, data_dictionary) -> bool:
+        
+    def get_mixpanel_event_schema_edits(self, connection_id: str = "001"):
         """
-        Update data dictionary in Firebase for a specific connection.
+        Get Mixpanel Event Schema from Firebase for a specific connection.
         
         Args:
-            connection_id (str): The connection ID to update data dictionary for
-            data_dictionary (Dict[str, Any]): The updated data dictionary to save
+            connection_id (str): The connection ID to fetch Mixpanel Event Schema for
+            
+        Returns:
+            Optional[Dict[str, Any]]: Mixpanel Event Schema from Firebase or None if not found
+        """
+        try:
+            # Get user document
+            user_doc = self.collection.document(connection_id).get()
+            
+            if user_doc.exists:
+                user_data = user_doc.to_dict()
+                mixpanel_event_schema = user_data.get("mixpanel_event_schema_edits")
+                print(f"[DEBUG] Mixpanel Event Schema edits: {mixpanel_event_schema}", flush=True)
+                
+                if mixpanel_event_schema and isinstance(mixpanel_event_schema, dict):
+                    print(f"[DEBUG] Successfully loaded Mixpanel Event Schema edits for connection {connection_id}", flush=True)
+                    return mixpanel_event_schema
+                else:
+                    print(f"[DEBUG] No Mixpanel Event Schema edits found for connection {connection_id}", flush=True)
+                    return None
+            else:
+                print(f"[DEBUG] Connection {connection_id} not found in Firebase", flush=True)
+                return None
+                
+        except Exception as e:
+            print(f"[ERROR] Failed to get Mixpanel Event Schema from Firebase: {str(e)}", flush=True)
+            return None
+
+    def update_mixpanel_event_schema_edits(self, connection_id: str, mixpanel_event_schema_edits) -> bool:
+        """
+        Update Mixpanel Event Schema in Firebase for a specific connection.
+        
+        Args:
+            connection_id (str): The connection ID to update Mixpanel Event Schema for
+            mixpanel_event_schema (Dict[str, Any]): The updated Mixpanel Event Schema to save
             
         Returns:
             bool: True if update was successful, False otherwise
@@ -435,16 +468,77 @@ class FirestoreSessionService(BaseSessionService):
             user_doc_ref = self.collection.document(connection_id)
             
             # Update the data_dictionary field
-            user_doc_ref.update({
-                "data_dictionary": data_dictionary
-            })
+            user_doc_ref.set({
+                "mixpanel_event_schema_edits": mixpanel_event_schema_edits
+            }, merge=True)
             
-            print(f"[DEBUG] Successfully updated data_dictionary for connection {connection_id}", flush=True)
+            print(f"[DEBUG] Successfully updated Mixpanel Event Schema for connection {connection_id}", flush=True)
             return True
                 
         except Exception as e:
-            print(f"[ERROR] Failed to update data dictionary in Firebase: {str(e)}", flush=True)
+            print(f"[ERROR] Failed to update Mixpanel Event Schema in Firebase: {str(e)}", flush=True)
             return False
+        
+    def get_mixpanel_user_properties_edits(self, connection_id: str = "001"):
+        """
+        Get Mixpanel Event Schema from Firebase for a specific connection.
+        
+        Args:
+            connection_id (str): The connection ID to fetch Mixpanel Event Schema for
+            
+        Returns:
+            Optional[Dict[str, Any]]: Mixpanel Event Schema from Firebase or None if not found
+        """
+        try:
+            # Get user document
+            user_doc = self.collection.document(connection_id).get()
+            
+            if user_doc.exists:
+                user_data = user_doc.to_dict()
+                mixpanel_user_properties_edits = user_data.get("mixpanel_user_properties_edits")
+                print(f"[DEBUG] Mixpanel User Properties edits: {mixpanel_user_properties_edits}", flush=True)
+                
+                if mixpanel_user_properties_edits and isinstance(mixpanel_user_properties_edits, dict):
+                    print(f"[DEBUG] Successfully loaded Mixpanel User Properties edits for connection {connection_id}", flush=True)
+                    return mixpanel_user_properties_edits
+                else:
+                    print(f"[DEBUG] No Mixpanel User Properties edits found for connection {connection_id}", flush=True)
+                    return None
+            else:
+                print(f"[DEBUG] Connection {connection_id} not found in Firebase", flush=True)
+                return None
+                
+        except Exception as e:
+            print(f"[ERROR] Failed to get Mixpanel Event Schema from Firebase: {str(e)}", flush=True)
+            return None
+          
+    def update_mixpanel_user_properties_edits(self, connection_id: str, mixpanel_user_properties_edits) -> bool:
+        """
+        Update Mixpanel User Properties in Firebase for a specific connection.
+        
+        Args:
+            connection_id (str): The connection ID to update Mixpanel User Properties for
+            mixpanel_user_properties_edits (Dict[str, Any]): The updated Mixpanel User Properties to save
+            
+        Returns:
+            bool: True if update was successful, False otherwise
+        """
+        try:
+            # Get user document reference
+            user_doc_ref = self.collection.document(connection_id)
+            
+            # Update the data_dictionary field
+            user_doc_ref.set({
+                "mixpanel_user_properties_edits": mixpanel_user_properties_edits
+            }, merge=True)
+            
+            print(f"[DEBUG] Successfully updated Mixpanel User Properties for connection {connection_id}", flush=True)
+            return True
+                
+        except Exception as e:
+            print(f"[ERROR] Failed to update Mixpanel User Properties in Firebase: {str(e)}", flush=True)
+            return False
+
 
 def embed_text(content: str) -> List[float]:
     client = genai.Client()

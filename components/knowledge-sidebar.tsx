@@ -188,10 +188,8 @@ interface ChatHistoryItem {
 export type PageView =
   | "chat"
   | "business-context"
-  | "events"
-  | "event-properties"
+  | "mixpanel-event-schema"
   | "user-properties"
-  | "vendo-schema"
   | "annotations"
   | "add-context"
   | "data-dictionary"
@@ -223,7 +221,7 @@ export function KnowledgeSidebar({
   const [searchQuery, setSearchQuery] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [isDataDictionaryOpen, setIsDataDictionaryOpen] = useState(
-    currentView === "event-properties" || currentView === "user-properties" || currentView === "data-dictionary",
+    currentView === "mixpanel-event-schema" || currentView === "user-properties"
   )
   const [isCompanyKnowledgeOpen, setIsCompanyKnowledgeOpen] = useState(
     currentView === "business-context" || currentView === "annotations" || currentView === "add-context",
@@ -457,10 +455,8 @@ export function KnowledgeSidebar({
                   onClick={() => setIsDataDictionaryOpen((open) => !open)}
                   isActive={
                     currentView === "data-dictionary" ||
-                    currentView === "events" ||
-                    currentView === "event-properties" ||
                     currentView === "user-properties" ||
-                    currentView === "vendo-schema"
+                    currentView === "mixpanel-event-schema"
                   }
                 >
                   {isDataDictionaryOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
@@ -468,12 +464,16 @@ export function KnowledgeSidebar({
                 </SidebarMenuButton>
                 {isDataDictionaryOpen && (
                   <SidebarMenu className="ml-6 mt-1">
-                    <SidebarMenuItem>
-                      <SidebarMenuButton onClick={() => onNavigate("events")} isActive={currentView === "events"}>
-                        <MousePointerClick size={16} />
-                        <span>Events</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
+                     <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => onNavigate("mixpanel-event-schema")}
+                  isActive={currentView === "mixpanel-event-schema"}
+                >
+                  <Database size={16} />
+                  <span>Vendo Schema</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+                    
                     <SidebarMenuItem>
                       <SidebarMenuButton
                         onClick={() => onNavigate("user-properties")}
@@ -483,15 +483,7 @@ export function KnowledgeSidebar({
                         <span>User Properties</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
-                    <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={() => onNavigate("vendo-schema")}
-                  isActive={currentView === "vendo-schema"}
-                >
-                  <Database size={16} />
-                  <span>Vendo Schema</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+                   
                   </SidebarMenu>
                 )}
               </SidebarMenuItem>

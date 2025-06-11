@@ -63,8 +63,8 @@ def setup_before_agent_call(callback_context: CallbackContext):
     callback_context.state["chat_history"] = chat_history
     callback_context.state["general_context"] = general_context
     
-    data_dictionary = firestore_session_service.get_data_dictionary_from_firebase(connection_id)
-    callback_context.state["data_dictionary"] = data_dictionary
+    mixpanel_event_schema = firestore_session_service.get_data_dictionary_from_firebase(connection_id)
+    callback_context.state["event_schema"] = mixpanel_event_schema
     
     callback_context.state["connection_id"] = connection_id
     callback_context.state["session_id"] = session_id

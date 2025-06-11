@@ -87,7 +87,7 @@ interface DataDictionary {
   [key: string]: DataDictionaryEvent
 }
 
-export function VendoSchemaView() {
+export function MixpanelEventSchemaView() {
   const [schemaData, setSchemaData] = useState<SchemaData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null)
@@ -109,8 +109,8 @@ export function VendoSchemaView() {
     const fetchSchemaData = async () => {
       try {
         setIsLoading(true)
-        // Fetch schema data (which now includes data dictionary)
-        const response = await fetch(`/api/vendo-schema?connection_id=${connectionId}`)
+        // Fetch schema data (which now includes Mixpanel Event Schema)
+        const response = await fetch(`/api/mixpanel-event-schema?connection_id=${connectionId}`)
         if (!response.ok) throw new Error("Failed to fetch schema data")
         const data = await response.json() as SchemaData
         
@@ -181,7 +181,7 @@ export function VendoSchemaView() {
 
   const handleSaveProperty = async (eventName: string, propertyName: string) => {
     try {
-      const response = await fetch(`/api/vendo-schema/update?connection_id=${connectionId}&event_name=${encodeURIComponent(eventName)}&property_name=${encodeURIComponent(propertyName)}&description=${encodeURIComponent(editingDescription)}&data_type=${encodeURIComponent(editingDataType)}`, {
+      const response = await fetch(`/api/mixpanel-event-schema/update?connection_id=${connectionId}&event_name=${encodeURIComponent(eventName)}&property_name=${encodeURIComponent(propertyName)}&description=${encodeURIComponent(editingDescription)}&data_type=${encodeURIComponent(editingDataType)}`, {
         method: "PUT",
       })
 
@@ -233,7 +233,7 @@ export function VendoSchemaView() {
 
   const handleSaveEventDescription = async (eventName: string) => {
     try {
-      const response = await fetch(`/api/vendo-schema/update?connection_id=${connectionId}&event_name=${encodeURIComponent(eventName)}&description=${encodeURIComponent(editingEventDescriptionText)}`, {
+      const response = await fetch(`/api/mixpanel-event-schema/update?connection_id=${connectionId}&event_name=${encodeURIComponent(eventName)}&description=${encodeURIComponent(editingEventDescriptionText)}`, {
         method: "PUT",
       })
 

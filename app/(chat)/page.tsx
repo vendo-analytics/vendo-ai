@@ -20,15 +20,13 @@ import { DocumentDetailView } from "@/components/document-detail-view"
 import { toast } from "sonner"
 import { addFirebaseContent } from "@/lib/firebase-content"
 import { useConnectionId } from "@/lib/connection-context"
-import { VendoSchemaView } from "@/components/vendo-schema-view"
+import { MixpanelEventSchemaView } from "@/components/mixpanel-event-schema-view"
 
 type PageView =
   | "chat"
   | "business-context"
-  | "events"
-  | "event-properties"
+  | "mixpanel-event-schema"
   | "user-properties"
-  | "vendo-schema"
   | "annotations"
   | "add-context"
   | "data-dictionary"
@@ -119,10 +117,6 @@ export default function Page() {
     switch (currentView) {
       case "business-context":
         return "Business Context"
-      case "events":
-        return "Events"
-      case "event-properties":
-        return "Event Properties"
       case "user-properties":
         return "User Properties"
       case "annotations":
@@ -133,24 +127,12 @@ export default function Page() {
         return "Data Dictionary"
       case "document-detail":
         return "Custom Document"
-      case "vendo-schema":
-        return "Vendo Schema"
+      case "mixpanel-event-schema":
+        return "Mixpanel Event Schema"
       case "chat":
       default:
         return "Vendo AI Demo"
     }
-  }
-
-  const handleNavigate = (view: PageView) => {
-    setCurrentView(view)
-    if (view !== "event-properties") {
-      setSelectedEvent(null)
-    }
-  }
-
-  const handleSelectEvent = (event: any) => {
-    setSelectedEvent(event)
-    setCurrentView("event-properties")
   }
 
   const handleContentAdded = useCallback(() => {
@@ -168,6 +150,10 @@ export default function Page() {
   const handleChatSelect = (chatId: string) => {
     setSelectedChatId(chatId)
     setCurrentView("chat")
+  }
+
+  const handleNavigate = (view: PageView) => {
+    setCurrentView(view)
   }
 
   const toggleDebugMode = async () => {
@@ -201,7 +187,7 @@ export default function Page() {
   const renderDataDictionaryMenu = () => (
     <div className="flex flex-col gap-4 p-8">
       <h2 className="text-lg font-semibold mb-2">Data Dictionary</h2>
-      <Button variant="outline" onClick={() => setCurrentView("event-properties")}>Event Properties</Button>
+      <Button variant="outline" onClick={() => setCurrentView("mixpanel-event-schema")}>Mixpanel Event Schema</Button>
       <Button variant="outline" onClick={() => setCurrentView("user-properties")}>User Properties</Button>
     </div>
   )
@@ -259,8 +245,7 @@ export default function Page() {
             />
           )}
           {currentView === "business-context" && <BusinessContextEditor />}
-          {currentView === "events" && <EventsView onSelectEvent={handleSelectEvent} />}
-          {currentView === "event-properties" && selectedEvent && <EventProperties event={selectedEvent} />}
+          {currentView === "mixpanel-event-schema" && <MixpanelEventSchemaView />}
           {currentView === "user-properties" && <UserProperties />}
           {currentView === "annotations" && <AnnotationsView />}
           {currentView === "add-context" && (
@@ -288,7 +273,7 @@ export default function Page() {
               }}
             />
           )}
-          {currentView === "vendo-schema" && <VendoSchemaView />}
+          {currentView === "mixpanel-event-schema" && <MixpanelEventSchemaView />}
         </div>
       </SidebarInset>
     </>

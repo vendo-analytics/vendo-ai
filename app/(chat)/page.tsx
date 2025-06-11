@@ -20,6 +20,7 @@ import { DocumentDetailView } from "@/components/document-detail-view"
 import { toast } from "sonner"
 import { addFirebaseContent } from "@/lib/firebase-content"
 import { useConnectionId } from "@/lib/connection-context"
+import { VendoSchemaView } from "@/components/vendo-schema-view"
 
 type PageView =
   | "chat"
@@ -27,6 +28,7 @@ type PageView =
   | "events"
   | "event-properties"
   | "user-properties"
+  | "vendo-schema"
   | "annotations"
   | "add-context"
   | "data-dictionary"
@@ -131,6 +133,8 @@ export default function Page() {
         return "Data Dictionary"
       case "document-detail":
         return "Custom Document"
+      case "vendo-schema":
+        return "Vendo Schema"
       case "chat":
       default:
         return "Vendo AI Demo"
@@ -284,6 +288,7 @@ export default function Page() {
               }}
             />
           )}
+          {currentView === "vendo-schema" && <VendoSchemaView />}
         </div>
       </SidebarInset>
     </>

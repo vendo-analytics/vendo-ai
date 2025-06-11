@@ -386,6 +386,66 @@ class FirestoreSessionService(BaseSessionService):
             print(f"[ERROR] Failed to get connection info from Firebase for user {connection_id}: {str(e)}", flush=True)
             return None
         
+    def get_data_dictionary_from_firebase(self, connection_id: str = "001"):
+        """
+        Get data dictionary from Firebase for a specific connection.
+        
+        Args:
+            connection_id (str): The connection ID to fetch data dictionary for
+            
+        Returns:
+            Optional[Dict[str, Any]]: Data dictionary from Firebase or None if not found
+        """
+        try:
+            # Get user document
+            user_doc = self.collection.document(connection_id).get()
+            
+            if user_doc.exists:
+                user_data = user_doc.to_dict()
+                data_dictionary = user_data.get("data_dictionary")
+                print(f"[DEBUG] Data dictionary: {data_dictionary}", flush=True)
+                
+                if data_dictionary and isinstance(data_dictionary, dict):
+                    print(f"[DEBUG] Successfully loaded data_dictionary for connection {connection_id}", flush=True)
+                    return data_dictionary
+                else:
+                    print(f"[DEBUG] No data_dictionary found for connection {connection_id}", flush=True)
+                    return None
+            else:
+                print(f"[DEBUG] Connection {connection_id} not found in Firebase", flush=True)
+                return None
+                
+        except Exception as e:
+            print(f"[ERROR] Failed to get data dictionary from Firebase: {str(e)}", flush=True)
+            return None
+
+    def update_data_dictionary(self, connection_id: str, data_dictionary) -> bool:
+        """
+        Update data dictionary in Firebase for a specific connection.
+        
+        Args:
+            connection_id (str): The connection ID to update data dictionary for
+            data_dictionary (Dict[str, Any]): The updated data dictionary to save
+            
+        Returns:
+            bool: True if update was successful, False otherwise
+        """
+        try:
+            # Get user document reference
+            user_doc_ref = self.collection.document(connection_id)
+            
+            # Update the data_dictionary field
+            user_doc_ref.update({
+                "data_dictionary": data_dictionary
+            })
+            
+            print(f"[DEBUG] Successfully updated data_dictionary for connection {connection_id}", flush=True)
+            return True
+                
+        except Exception as e:
+            print(f"[ERROR] Failed to update data dictionary in Firebase: {str(e)}", flush=True)
+            return False
+
 def embed_text(content: str) -> List[float]:
     client = genai.Client()
 

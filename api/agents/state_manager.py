@@ -25,7 +25,7 @@ def get_current_session_id() -> str:
 
 def set_debug_mode(is_debug: bool):
     """Set global debug mode"""
-    global debug_mode
+    
     debug_mode = is_debug
     print(f"[DEBUG] Set debug mode to: {is_debug}", flush=True)
 

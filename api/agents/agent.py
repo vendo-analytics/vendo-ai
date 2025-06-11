@@ -56,6 +56,15 @@ def setup_before_agent_call(callback_context: CallbackContext):
     # Get the current connection_id and session_id from state_manager
     connection_id = get_current_connection_id()
     session_id = get_current_session_id()
+
+    chat_history = firestore_session_service.get_chat_messages(connection_id=get_current_connection_id(),session_id=get_current_session_id)
+    general_context =firestore_session_service.get_all_general_context(get_current_connection_id())
+
+    callback_context.state["chat_history"] = chat_history
+    callback_context.state["general_context"] = general_context
+    
+    data_dictionary = firestore_session_service.get_data_dictionary_from_firebase(connection_id)
+    callback_context.state["data_dictionary"] = data_dictionary
     
     callback_context.state["connection_id"] = connection_id
     callback_context.state["session_id"] = session_id
@@ -102,9 +111,6 @@ root_agent = Agent(
         f"""
         You are a Data Science and Data Analytics Multi Agent System.
         - Today's date: {get_today_date()}\n    
-        
-        - Chat history (this can be used to answer questions): {firestore_session_service.get_chat_messages(connection_id=get_current_connection_id(),session_id=get_current_session_id)}
-        - Context: {firestore_session_service.get_all_general_context(get_current_connection_id())}
         - Always assume the context in the business context information is correct and do not confirm with the customer. i.e currency, business name, data set id, etc.
         """  
         #  How to use annotations: {get_annotation_context()}

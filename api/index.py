@@ -31,6 +31,8 @@ from fastapi.responses import JSONResponse
 from .agents.mixpanel_client import MixpanelClient
 from langfuse import Langfuse
 import secrets
+from fastapi import HTTPException
+from typing import Optional
 
 # Logging
 logging.basicConfig(level=logging.DEBUG)
@@ -637,6 +639,7 @@ async def get_debug_mode_endpoint():
 async def set_debug_mode_endpoint(request: dict):
     try:
         debug_mode = request.get("debug_mode")
+        print(f"[DEBUG] Debug mode: {debug_mode}")
         
         if debug_mode is None:
             return {"error": "debug_mode is required"}, 400
@@ -646,3 +649,95 @@ async def set_debug_mode_endpoint(request: dict):
     except Exception as e:
         logger.error(f"[POST /debug-mode] {e}")
         return {"error": str(e)}, 500
+
+
+@app.get("/api/vendo-schema")
+async def get_data_dictionary(connection_id: str = "001"):
+    """
+    Get data dictionary from Firebase for a specific connection.
+    Events and their properties are sorted alphabetically.
+    
+    Args:
+        connection_id (str): The connection ID to fetch data dictionary for
+        
+    Returns:
+        dict: Sorted data dictionary from Firebase
+    """
+    try:
+        data_dictionary = firestore_session_service.get_data_dictionary_from_firebase(connection_id)
+        if data_dictionary is None:
+            raise HTTPException(status_code=404, detail="Data dictionary not found")
+        
+        # Sort events alphabetically
+        sorted_events = {}
+        for event_name in sorted(data_dictionary.get("events", {}).keys()):
+            event_data = data_dictionary["events"][event_name]
+            
+            # Sort properties alphabetically if they exist
+            if "properties" in event_data:
+                sorted_properties = {}
+                for prop_name in sorted(event_data["properties"].keys()):
+                    sorted_properties[prop_name] = event_data["properties"][prop_name]
+                event_data["properties"] = sorted_properties
+            
+            sorted_events[event_name] = event_data
+        
+        # Create new dictionary with sorted events and preserve summary
+        sorted_data_dictionary = {
+            "summary": data_dictionary.get("summary", {}),
+            "events": sorted_events
+        }
+        
+        print(f"[DEBUG] Sorted data dictionary: {sorted_data_dictionary}", flush=True)
+        return sorted_data_dictionary
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/vendo-schema/update")
+async def update_schema(
+    connection_id: str,
+    event_name: str,
+    property_name: Optional[str] = None,
+    description: Optional[str] = None,
+    data_type: Optional[str] = None
+):
+    try:
+        # Get the current data dictionary
+        current_dict = firestore_session_service.get_data_dictionary_from_firebase(connection_id)
+        if current_dict is None:
+            current_dict = {"events": {}}
+        
+        # Ensure events dictionary exists
+        if "events" not in current_dict:
+            current_dict["events"] = {}
+        
+        # If property_name is provided, update property description/type
+        if property_name:
+            if event_name not in current_dict["events"]:
+                current_dict["events"][event_name] = {"properties": {}}
+            if "properties" not in current_dict["events"][event_name]:
+                current_dict["events"][event_name]["properties"] = {}
+                
+            if property_name not in current_dict["events"][event_name]["properties"]:
+                current_dict["events"][event_name]["properties"][property_name] = {}
+                
+            if description is not None:
+                current_dict["events"][event_name]["properties"][property_name]["description"] = description
+            if data_type is not None:
+                current_dict["events"][event_name]["properties"][property_name]["data_type"] = data_type
+        # Otherwise, update event description
+        else:
+            if event_name not in current_dict["events"]:
+                current_dict["events"][event_name] = {"properties": {}}
+            if description is not None:
+                current_dict["events"][event_name]["description"] = description
+        
+        # Update the entire data dictionary in Firebase
+        success = firestore_session_service.update_data_dictionary(connection_id, current_dict)
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to update data dictionary")
+        
+        return {"success": True}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) 

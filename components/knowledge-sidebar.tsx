@@ -16,6 +16,7 @@ import {
 import { PlusIcon } from "./icons"
 import { toast } from "sonner"
 import {
+  Database,
   MessageCircle,
   FileText,
   ChevronDown,
@@ -190,6 +191,7 @@ export type PageView =
   | "events"
   | "event-properties"
   | "user-properties"
+  | "vendo-schema"
   | "annotations"
   | "add-context"
   | "data-dictionary"
@@ -457,7 +459,8 @@ export function KnowledgeSidebar({
                     currentView === "data-dictionary" ||
                     currentView === "events" ||
                     currentView === "event-properties" ||
-                    currentView === "user-properties"
+                    currentView === "user-properties" ||
+                    currentView === "vendo-schema"
                   }
                 >
                   {isDataDictionaryOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
@@ -480,9 +483,19 @@ export function KnowledgeSidebar({
                         <span>User Properties</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
+                    <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => onNavigate("vendo-schema")}
+                  isActive={currentView === "vendo-schema"}
+                >
+                  <Database size={16} />
+                  <span>Vendo Schema</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
                   </SidebarMenu>
                 )}
               </SidebarMenuItem>
+              
               {/* Company Knowledge Parent */}
               <SidebarMenuItem>
                 <SidebarMenuButton

@@ -384,8 +384,8 @@ export function KnowledgeSidebar({
       onNavigate("chat");
       
       // Refresh chat history after loading a chat
-      const history = await fetchChatHistory(selectedConnectionId);
-      setChatHistory(history);
+      // const history = await fetchChatHistory(selectedConnectionId);
+      //setChatHistory(history);
       
       if (onChatSelect) {
         onChatSelect(chatId, []);
@@ -470,7 +470,7 @@ export function KnowledgeSidebar({
                   isActive={currentView === "mixpanel-event-schema"}
                 >
                   <Database size={16} />
-                  <span>Vendo Schema</span>
+                  <span>Events</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
                     

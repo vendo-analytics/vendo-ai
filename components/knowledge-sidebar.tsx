@@ -384,8 +384,8 @@ export function KnowledgeSidebar({
       onNavigate("chat");
       
       // Refresh chat history after loading a chat
-      // const history = await fetchChatHistory(selectedConnectionId);
-      //setChatHistory(history);
+      const history = await fetchChatHistory(selectedConnectionId);
+      setChatHistory(history);
       
       if (onChatSelect) {
         onChatSelect(chatId, []);
@@ -679,9 +679,13 @@ const fetchChatHistory = async (connectionId: string) => {
     const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
 
     // Helper function to format chat title
-    const formatChatTitle = (timestamp: string | Date) => {
-      const date = new Date(timestamp);
-      return `Chat ${date.toLocaleString()}`; // Shows both date and time
+    const formatChatTitle = (chat: any) => {
+      // Use the content (summary) as the title, or fallback to timestamp
+      if (chat.content) {
+        return chat.content;
+      }
+      const date = new Date(chat.timestamp);
+      return `Chat ${date.toLocaleString()}`;
     };
 
     // Helper function to group chats by date
@@ -694,7 +698,7 @@ const fetchChatHistory = async (connectionId: string) => {
           })
           .map((chat) => ({
             id: chat.session_id,
-            title: formatChatTitle(chat.timestamp),
+            title: formatChatTitle(chat),
             date: new Date(chat.timestamp),
             preview: chat.content
           })),
@@ -705,7 +709,7 @@ const fetchChatHistory = async (connectionId: string) => {
           })
           .map((chat) => ({
             id: chat.session_id,
-            title: formatChatTitle(chat.timestamp),
+            title: formatChatTitle(chat),
             date: new Date(chat.timestamp),
             preview: chat.content
           })),
@@ -716,7 +720,7 @@ const fetchChatHistory = async (connectionId: string) => {
           })
           .map((chat) => ({
             id: chat.session_id,
-            title: formatChatTitle(chat.timestamp),
+            title: formatChatTitle(chat),
             date: new Date(chat.timestamp),
             preview: chat.content
           }))

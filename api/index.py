@@ -116,7 +116,6 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_i
     await websocket.accept()
     print(f"[ACCEPTED] WebSocket accepted")
     
-    
     print(f"[CONNECTED] #{session_id} User: {connection_id}")
 
     # Create session with the provided session ID
@@ -130,23 +129,21 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_i
     set_current_connection_id(connection_id)
     set_current_session_id(session_id)
 
-
-
     runner = Runner(app_name=APP_NAME, agent=root_agent, session_service=session_service)
     run_config = RunConfig(response_modalities=["text"])
     organization_id = firestore_session_service.get_connection_info(connection_id).get("organization_id")
     source_id = firestore_session_service.get_connection_info(connection_id).get("source_id")
     mixpanel_details = firestore_session_service.get_mixpanel_details(organization_id, source_id)
+    is_first_message = True
 
     try:
         while True:
-            
             print("[WAITING] for client message")
             msg = await websocket.receive_text()
             print(f"[RECEIVED] {msg}")
             data = json.loads(msg)
 
-            # # Skip pings and other non-data messages
+            # Skip pings and other non-data messages
             if data.get("type") == "ping":
                 continue
 
@@ -157,20 +154,59 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_i
                 continue
                    
             with tracer.start_as_current_span("user_message") as span:
-                
-
-                content_obj = Content(role="user", parts=[Part.from_text(text=content)])
-           
-
                 # Store user message in Firebase chat history
                 firestore_session_service.store_chat_message(
                     connection_id=connection_id,
                     session_id=session_id,
                     role="user",
-                    content=content  # Including embedding for potential semantic search later
+                    content=content
                 )
 
-                
+                # Generate summary for first message
+                if is_first_message:
+                    # Create a separate session for summary generation
+                    summary_session = session_service.create_session(
+                        app_name=APP_NAME,
+                        user_id=connection_id,
+                        session_id=f"{session_id}_summary"
+                    )
+                    
+                    summary_prompt = f"""You are a summarization assistant. Your task is to summarize the user's message by identifying their intent, topic, and any specific questions they're asking. DO NOT answer their question - only summarize what they're asking about. Restrict to 30 charactrers max
+
+                            For example:
+                            User: "What's the weather like in New York?"
+                            Summary: "Current weather conditions in New York City"
+
+                            User: "Can you help me fix my broken laptop screen?"
+                            Summary: "Assistance with laptop screen repair"
+
+                            Now, please summarize this user message:
+                            {content}
+
+                            Summary:"""
+                    
+                    summary_content = Content(role="user", parts=[Part.from_text(text=summary_prompt)])
+                    summary_result = runner.run_async(
+                        session_id=f"{session_id}_summary",  # Use separate session for summary
+                        user_id=connection_id,
+                        new_message=summary_content,
+                        run_config=run_config
+                    )
+                    
+                    summary_text = ""
+                    async for event in summary_result:
+                        if event.is_final_response():
+                            if event.content and event.content.parts:
+                                summary_text = event.content.parts[0].text
+                                print(f"[DEBUG] Message Summary: {summary_text}", flush=True)
+                                # Store summary in Firebase
+                                firestore_session_service.store_chat_message(
+                                    connection_id=connection_id,
+                                    session_id=session_id,
+                                    role="summary",
+                                    content=f"Message Summary: {summary_text}"
+                                )
+                    is_first_message = False
                 
                 # Get debug mode from state manager
                 debug_mode = get_debug_mode()
@@ -178,11 +214,15 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_i
                 
                 # Configure agent with debug mode
                 run_config = RunConfig(
-                    response_modalities=["text"] # Pass debug mode to agent
+                    response_modalities=["text"]
                 )
                 
+                # Create content object for the actual response
+                content_obj = Content(role="user", parts=[Part.from_text(text=content)])
+                
+                # Get the actual response using the main session
                 result = runner.run_async(
-                    session_id=session_id, 
+                    session_id=session_id,  # Use main session for actual response
                     user_id=connection_id, 
                     new_message=content_obj,
                     run_config=run_config
@@ -223,7 +263,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_i
                                 connection_id=connection_id,
                                 session_id=session_id,
                                 role="assistant",
-                                content=result_text # Including embedding for potential semantic search later
+                                content=result_text
                             )
                             
                             span.set_attribute("output", result_text)
@@ -257,7 +297,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_i
                     "traceId": trace_id if 'trace_id' in locals() else None,
                     "turn_complete": True,
                     "is_speech": True,
-                    "session_id": session_id  # Send the session ID back to client
+                    "session_id": session_id
                 }))
                 
     except WebSocketDisconnect:
@@ -288,12 +328,22 @@ async def get_chat_history(connection_id: str = Query(...)):
         all_chats = []
         for session_id, messages in sessions_data.items():
             if messages:  # If session has messages
-                # Use the first message for preview and timestamp
-                first_message = messages[0]
+                # Find the summary message
+                summary = None
+                first_message = None
+                for msg in messages:
+                    if msg.get('role') == 'summary':
+                        summary = msg.get('content', '').replace('Message Summary: ', '')
+                    elif not first_message:
+                        first_message = msg
+                
+                # Use summary as title if available, otherwise use first message
+                title = summary if summary else first_message.get('content', '')
+                
                 all_chats.append({
                     'session_id': session_id,
                     'timestamp': first_message.get('timestamp'),
-                    'content': first_message.get('content', ''),
+                    'content': title,
                     'message_count': len(messages)
                 })
         
@@ -652,17 +702,17 @@ async def get_user_properties(connection_id: str = Query(...)):
         # Merge edits with raw
         properties = []
         for row in results:
-            prop_name = row.name
-            merged = {
+                prop_name = row.name
+                merged = {
                 "event_name": row.event_name,
-                "name": prop_name,
-                "type": user_properties_edits.get(prop_name, {}).get("type", row.type),
-                "description": user_properties_edits.get(prop_name, {}).get("description", row.description),
-                "sample_value": row.sample_value
-            }
-            properties.append(merged)
+                    "name": prop_name,
+                    "type": user_properties_edits.get(prop_name, {}).get("type", row.type),
+                    "description": user_properties_edits.get(prop_name, {}).get("description", row.description),
+                    "sample_value": row.sample_value
+                }
+                properties.append(merged)
 
-        print(f"[DEBUG] Merged User Properties: {properties}", flush=True)
+        
         return properties
 
     except Exception as e:
@@ -680,11 +730,16 @@ async def get_chat_messages(
             connection_id=connection_id,
             session_id=session_id
         )
-        print(f"[DEBUG] Messages: {messages}")
-        return messages
+
+        # Filter out summary messages
+        filtered_messages = [msg for msg in messages if msg.get('role') != 'summary']
+        print(f"[DEBUG] Filtered Messages: {filtered_messages}")
+        return filtered_messages
     except Exception as e:
         logger.error(f"[GET /chat/messages] {e}")
         return {"error": str(e)}, 500
+    
+
 
 @app.get("/api/debug-mode")
 async def get_debug_mode_endpoint():
@@ -775,8 +830,8 @@ async def get_mixpanel_event_schema(connection_id: str = "001"):
         return sorted_schema
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
+        raise HTTPException(status_code=500, detail=str(e)) 
+    
 @app.put("/api/mixpanel-event-schema/update")
 async def update_mixpanel_event_schema(
     connection_id: str,
@@ -812,6 +867,6 @@ async def update_mixpanel_event_schema(
             raise HTTPException(status_code=500, detail="Failed to update user edits")
         
         return {"success": True}
-    
+        
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) 

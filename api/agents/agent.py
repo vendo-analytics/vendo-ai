@@ -65,6 +65,9 @@ def setup_before_agent_call(callback_context: CallbackContext):
     
     mixpanel_event_schema = firestore_session_service.get_mixpanel_event_schema_edits(connection_id)
     callback_context.state["event_schema"] = mixpanel_event_schema
+
+    mixpanel_user_properties = firestore_session_service.get_mixpanel_user_properties_edits(connection_id)
+    callback_context.state["user_properties"] = mixpanel_user_properties
     
     callback_context.state["connection_id"] = connection_id
     callback_context.state["session_id"] = session_id
@@ -83,8 +86,8 @@ def setup_before_agent_call(callback_context: CallbackContext):
 
     # Load data set addresses and schemas into session state
     callback_context.state["user_property_dataset"] = f"gam-dwh.{business_context['dataset_id']}.mixpanel_user_data"
-    callback_context.state["user_property_schema"] = get_user_properties()
-    callback_context.state["event_schema"] = get_events()
+    # callback_context.state["user_property_schema"] = get_user_properties()
+    # callback_context.state["event_schema"] = get_events()
     callback_context.state["event_dataset"] = f"gam-dwh.{business_context['dataset_id']}.mixpanel_all_data_export"
     #TODO: Add more Context Tables
 

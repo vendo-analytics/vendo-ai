@@ -149,8 +149,8 @@ export function UserProperties() {
                 {properties.map((prop) => {
                   const isEditing = editingProperty === prop.name
                   return (
-                    <tr key={prop.name} className="border-b">
-                      <td className="py-4 px-4 font-mono text-sm">{prop.name}</td>
+                  <tr key={prop.name} className="border-b">
+                    <td className="py-4 px-4 font-mono text-sm">{prop.name}</td>
                       <td className="py-4 px-4">
                         {isEditing ? (
                           <Select value={editingType} onValueChange={setEditingType}>
@@ -220,7 +220,7 @@ export function UserProperties() {
                           )}
                         </div>
                       </td>
-                    </tr>
+                  </tr>
                   )
                 })}
               </tbody>

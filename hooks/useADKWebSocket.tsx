@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useConnectionId } from "@/lib/connection-context";
+import { toast } from "sonner";
 
 // Add Web Speech API type definitions
 interface SpeechRecognitionEvent extends Event {
@@ -147,16 +148,64 @@ export function useADKWebSocket({
     console.log("[WS] Updated conversation history:", conversationHistory.current);
   }, []);
 
-  // Update socket.onmessage to use handleAssistantMessage
+  // Generate a new session ID
+  const generateSessionId = () => {
+    const timestamp = new Date().toISOString()
+      .replace(/[-:]/g, '')  // Remove dashes and colons
+      .split('.')[0];        // Remove milliseconds
+    const randomHex = Array.from(crypto.getRandomValues(new Uint8Array(2)))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+    return `${timestamp}_${randomHex}`;
+  };
+
+  // Add state for current session ID
+  const [sessionId, setSessionId] = useState(() => generateSessionId());
+
+  // Reset conversation history when session ID changes
+  useEffect(() => {
+    conversationHistory.current = [];
+  }, [sessionId]);
+
+  // Add function to load and replay a session
+  const loadSession = useCallback(async (existingSessionId: string) => {
+    try {
+      console.log("[WS] Loading session:", existingSessionId);
+      const response = await fetch(`/api/chat/messages?connection_id=${connectionId}&session_id=${existingSessionId}`);
+      if (!response.ok) throw new Error("Failed to fetch session messages");
+      const messages = await response.json();
+      console.log("[WS] Loaded messages:", messages);
+
+      setSessionId(existingSessionId);
+
+      // Send each message to be displayed
+      messages.forEach((message: any) => {
+        if (message.content && message.role) {
+          callbacksRef.current.onTextMessage(
+            message.content,
+            true,  // is final
+            false, // not partial
+            message.role,
+            message.traceId
+          );
+        }
+      });
+      console.log("[WS] Messages sent:", messages);
+
+    } catch (error) {
+      console.error("Error loading session:", error);
+      toast.error("Failed to load chat session");
+    }
+  }, [connectionId]);
+
+  // Modify connect to use the current sessionId
   const connect = useCallback(() => {
     if (ws.current?.readyState === WebSocket.OPEN) {
       console.log("[WS] Already connected, skipping connect");
       return;
     }
 
-    const sessionId = "001"; // You can randomize or parametrize this
     const wsUrl = `ws://localhost:8000/ws/${sessionId}?connection_id=${connectionId}`;
-    
     console.log("[WS] Attempting to connect to:", wsUrl);
     
     try {
@@ -171,7 +220,7 @@ export function useADKWebSocket({
       }, 30000); // Send ping every 30 seconds
 
       socket.onopen = () => {
-        console.log("[WS] Connected successfully");
+        console.log("[WS] Connected successfully with session:", sessionId);
         setIsConnected(true);
         reconnectAttempts.current = 0;
       };
@@ -187,7 +236,7 @@ export function useADKWebSocket({
             // Stop any ongoing TTS when receiving a new message
             stopTTS();
             
-            onTextMessage(
+            callbacksRef.current.onTextMessage(
               data.data,
               data.turn_complete,
               data.is_partial,
@@ -262,7 +311,7 @@ export function useADKWebSocket({
       console.error("[WS] Failed to create WebSocket:", err);
       setIsConnected(false);
     }
-  }, [handleAssistantMessage, connectionId]);
+  }, [sessionId, connectionId]);
 
   const sendMessage = useCallback((message: any) => {
     console.log("[WS] Attempting to send message:", message);
@@ -387,7 +436,9 @@ export function useADKWebSocket({
       saveHistory(); // Save one last time
     };
   }, []);
-
+  const loadSessionMessages = async (messages: Message[]) => {
+    setMessages(messages)
+  }
   const startListening = useCallback(async () => {
     // Extra safety: reset manual stop flag at the start of every recording session
     stoppedManuallyRef.current = false;
@@ -560,14 +611,34 @@ export function useADKWebSocket({
     };
   }, [stopListening]);
 
-  return { 
-    sendUserMessage, 
-    isConnected, 
-    startListening, 
-    stopListening, 
+  // Add function to create a new session
+  const createNewSession = useCallback(() => {
+    const newSessionId = generateSessionId();
+    setSessionId(newSessionId);
+    conversationHistory.current = [];
+    
+    // Close existing connection if any
+    if (ws.current) {
+      ws.current.close();
+    }
+    
+    // Connect with new session ID
+    connect();
+    
+    return newSessionId;
+  }, [connect]);
+
+  return {
+    sendUserMessage,
+    isConnected,
+    startListening,
+    stopListening,
     isRecording,
     isAudioEnabled,
-    setIsAudioEnabled: setIsAudioEnabled || (() => {}), // Provide a no-op function if not provided
-    stopTTS // Expose stopTTS function
-  };
+    setIsAudioEnabled: setIsAudioEnabled || (() => {}),
+    stopTTS,
+    loadSession,
+    loadSessionMessages,
+    createNewSession
+  }
 }

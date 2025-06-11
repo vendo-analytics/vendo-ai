@@ -159,6 +159,8 @@ EVENT_TABLE_SCHEMA = [
     {"name": "utm_term", "mode": "NULLABLE", "type": "STRING", "description": "The last seen attributed term value (Page Viewed, Product Viewed, etc.)"},
 ]
 
+
+
 # Event Names and Descriptions
 EVENT_NAMES = {
     "Page Viewed": "The page_viewed event logs an instance where a buyer visited a page. This event is available on the online store, checkout, and order status pages.",

@@ -31,8 +31,11 @@ class FirebaseClient:
 class FirestoreSessionService(BaseSessionService):
     def __init__(self, collection_name="vendo_ai_memory"):
         super().__init__()
+        # Load service_key.json from the project root
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        service_key_path = os.path.join(project_root, 'service_key.json')
         self.db = admin_firestore.client(firebase_admin.initialize_app(options={
-            'databaseURL': os.getenv("FIREBASE_DB_URL")
+            'credential': firebase_admin.credentials.Certificate(service_key_path)
         }))
         self.collection = self.db.collection(collection_name)
 
@@ -102,11 +105,10 @@ class FirestoreSessionService(BaseSessionService):
             "memory": memory
         })
 
-    def append_message(self, connection_id: str, role: str, content: str, message_type: str = "messages", include_embedding: bool = False):
+    def append_message(self, connection_id: str, role: str, content: str, message_type: str = "messages", include_embedding: bool = False, title: str = None, author: str = None, created_at: str = None, updated_at: str = None):
 
         if include_embedding:
             embedding = embed_text(content)
-            # Convert embedding to a list of floats that Firestore can store
             embedding_list = embedding.tolist() if hasattr(embedding, 'tolist') else list(embedding)
         else:
             embedding_list = None
@@ -114,22 +116,88 @@ class FirestoreSessionService(BaseSessionService):
         message = {
             "role": role,
             "content": content,
+            "title": title,
+            "author": author,
+            "created_at": created_at,
+            "updated_at": updated_at,
             "timestamp": datetime.datetime.utcnow(),
-            "embedding": embedding_list  # Store as regular list
+            "embedding": embedding_list
         }
-        # Use connection_id directly as the document ID
         self.collection.document(connection_id).set({
             message_type: firestore.ArrayUnion([message])
         }, merge=True)
 
-    
+    def store_chat_message(
+        self, 
+        connection_id: str, 
+        session_id: str, 
+        role: str,
+        content: str,
+        include_embedding: bool = False
+    ) -> None:
+        """
+        Store a chat message directly in chat_history
+        """
+        if include_embedding:
+            embedding = embed_text(content)
+            embedding_list = embedding.tolist() if hasattr(embedding, 'tolist') else list(embedding)
+        else:
+            embedding_list = None
 
-    def get_messages(self, connection_id: str):
-        # Use connection_id directly as the document ID
-        doc = self.collection.document(connection_id).get()
-        if doc.exists:
-            return doc.to_dict().get("messages", [])
-        return []
+        message = {
+            "role": role,
+            "content": content,
+            "timestamp": datetime.datetime.utcnow(),
+            "embedding": embedding_list
+        }
+
+        # Get the chat_history document
+        chat_ref = self.collection.document(connection_id).collection("chat_history").document("messages")
+        
+        # Get current messages or initialize empty dict
+        doc = chat_ref.get()
+        current_data = doc.to_dict() if doc.exists else {}
+        
+        # Get current session messages or initialize empty list
+        session_messages = current_data.get(session_id, [])
+        
+        # Append new message
+        session_messages.append(message)
+        
+        # Update the document with the new message
+        chat_ref.set({
+            session_id: session_messages
+        }, merge=True)
+
+    def get_chat_messages(
+        self, 
+        connection_id: str, 
+        session_id: str,
+        limit: int = None
+    ) -> List[dict]:
+        """
+        Retrieve chat messages for a specific session
+        """
+        print(f"[DEBUG] Getting chat messages for connection_id: {connection_id}, session_id: {session_id}", flush=True)
+        chat_ref = self.collection.document(connection_id)\
+            .collection("chat_history")\
+            .document("messages")
+        
+        doc = chat_ref.get()
+        if not doc.exists:
+            return []
+            
+        data = doc.to_dict()
+        messages = data.get(session_id, [])
+        
+        # Sort by timestamp
+        messages.sort(key=lambda x: x['timestamp'])
+        
+        if limit:
+            messages = messages[:limit]
+            
+        return messages
+
     
     def get_general_context(self, connection_id: str, message_type: str = "general_context"):
         doc = self.collection.document(connection_id).get()
@@ -163,9 +231,19 @@ class FirestoreSessionService(BaseSessionService):
         messages = doc.to_dict().get(message_type, [])
         result = []
 
-        for msg in messages:
+        for index, msg in enumerate(messages):
             if "content" in msg:
-                result.append(msg["content"])
+                # Return full document object with all metadata
+                result.append({
+                    "id": f"{connection_id}_{index}",
+                    "title": msg.get("title", ""),
+                    "content": msg["content"],
+                    "author": msg.get("author", ""),
+                    "created_at": msg.get("created_at", ""),
+                    "updated_at": msg.get("updated_at", ""),
+                    "timestamp": msg.get("timestamp"),
+                    "index": index
+                })
         
         return result
 
@@ -175,7 +253,7 @@ class FirestoreSessionService(BaseSessionService):
             return result.to_dict()
         return None
     
-    def update_general_context_by_index(self, connection_id: str, index: int, new_content: str, message_type: str = "general_context"):
+    def update_general_context_by_index(self, connection_id: str, index: int, new_content: str, message_type: str = "general_context", new_title: str = None):
         """Update a specific requirement by index"""
         doc_ref = self.collection.document(connection_id)
         doc = doc_ref.get()
@@ -193,6 +271,11 @@ class FirestoreSessionService(BaseSessionService):
         # Update the requirement at the specified index
         general_context[index]["content"] = new_content
         general_context[index]["timestamp"] = datetime.datetime.utcnow()
+        general_context[index]["updated_at"] = datetime.datetime.utcnow().isoformat()
+        
+        # Update title if provided
+        if new_title is not None:
+            general_context[index]["title"] = new_title
         
         # Update embedding for new content
         if "embedding" in general_context[index]:
@@ -303,6 +386,160 @@ class FirestoreSessionService(BaseSessionService):
             print(f"[ERROR] Failed to get connection info from Firebase for user {connection_id}: {str(e)}", flush=True)
             return None
         
+    def get_mixpanel_event_schema(self, connection_id: str = "001"):
+        """
+        Get Mixpanel Event Schema from Firebase for a specific connection.
+        
+        Args:
+            connection_id (str): The connection ID to fetch Mixpanel Event Schema for
+            
+        Returns:
+            Optional[Dict[str, Any]]: Mixpanel Event Schema from Firebase or None if not found
+        """
+        try:
+            # Get user document
+            user_doc = self.collection.document(connection_id).get()
+            
+            if user_doc.exists:
+                user_data = user_doc.to_dict()
+                mixpanel_event_schema = user_data.get("mixpanel_event_schema")
+                print(f"[DEBUG] Mixpanel Event Schema: {mixpanel_event_schema}", flush=True)
+                
+                if mixpanel_event_schema and isinstance(mixpanel_event_schema, dict):
+                    print(f"[DEBUG] Successfully loaded Mixpanel Event Schema for connection {connection_id}", flush=True)
+                    return mixpanel_event_schema
+                else:
+                    print(f"[DEBUG] No Mixpanel Event Schema found for connection {connection_id}", flush=True)
+                    return None
+            else:
+                print(f"[DEBUG] Connection {connection_id} not found in Firebase", flush=True)
+                return None
+                
+        except Exception as e:
+            print(f"[ERROR] Failed to get Mixpanel Event Schema from Firebase: {str(e)}", flush=True)
+            return None
+        
+    def get_mixpanel_event_schema_edits(self, connection_id: str = "001"):
+        """
+        Get Mixpanel Event Schema from Firebase for a specific connection.
+        
+        Args:
+            connection_id (str): The connection ID to fetch Mixpanel Event Schema for
+            
+        Returns:
+            Optional[Dict[str, Any]]: Mixpanel Event Schema from Firebase or None if not found
+        """
+        try:
+            # Get user document
+            user_doc = self.collection.document(connection_id).get()
+            
+            if user_doc.exists:
+                user_data = user_doc.to_dict()
+                mixpanel_event_schema = user_data.get("mixpanel_event_schema_edits")
+                print(f"[DEBUG] Mixpanel Event Schema edits: {mixpanel_event_schema}", flush=True)
+                
+                if mixpanel_event_schema and isinstance(mixpanel_event_schema, dict):
+                    print(f"[DEBUG] Successfully loaded Mixpanel Event Schema edits for connection {connection_id}", flush=True)
+                    return mixpanel_event_schema
+                else:
+                    print(f"[DEBUG] No Mixpanel Event Schema edits found for connection {connection_id}", flush=True)
+                    return None
+            else:
+                print(f"[DEBUG] Connection {connection_id} not found in Firebase", flush=True)
+                return None
+                
+        except Exception as e:
+            print(f"[ERROR] Failed to get Mixpanel Event Schema from Firebase: {str(e)}", flush=True)
+            return None
+
+    def update_mixpanel_event_schema_edits(self, connection_id: str, mixpanel_event_schema_edits) -> bool:
+        """
+        Update Mixpanel Event Schema in Firebase for a specific connection.
+        
+        Args:
+            connection_id (str): The connection ID to update Mixpanel Event Schema for
+            mixpanel_event_schema (Dict[str, Any]): The updated Mixpanel Event Schema to save
+            
+        Returns:
+            bool: True if update was successful, False otherwise
+        """
+        try:
+            # Get user document reference
+            user_doc_ref = self.collection.document(connection_id)
+            
+            # Update the data_dictionary field
+            user_doc_ref.set({
+                "mixpanel_event_schema_edits": mixpanel_event_schema_edits
+            }, merge=True)
+            
+            print(f"[DEBUG] Successfully updated Mixpanel Event Schema for connection {connection_id}", flush=True)
+            return True
+                
+        except Exception as e:
+            print(f"[ERROR] Failed to update Mixpanel Event Schema in Firebase: {str(e)}", flush=True)
+            return False
+        
+    def get_mixpanel_user_properties_edits(self, connection_id: str = "001"):
+        """
+        Get Mixpanel Event Schema from Firebase for a specific connection.
+        
+        Args:
+            connection_id (str): The connection ID to fetch Mixpanel Event Schema for
+            
+        Returns:
+            Optional[Dict[str, Any]]: Mixpanel Event Schema from Firebase or None if not found
+        """
+        try:
+            # Get user document
+            user_doc = self.collection.document(connection_id).get()
+            
+            if user_doc.exists:
+                user_data = user_doc.to_dict()
+                mixpanel_user_properties_edits = user_data.get("mixpanel_user_properties_edits")
+                print(f"[DEBUG] Mixpanel User Properties edits: {mixpanel_user_properties_edits}", flush=True)
+                
+                if mixpanel_user_properties_edits and isinstance(mixpanel_user_properties_edits, dict):
+                    print(f"[DEBUG] Successfully loaded Mixpanel User Properties edits for connection {connection_id}", flush=True)
+                    return mixpanel_user_properties_edits
+                else:
+                    print(f"[DEBUG] No Mixpanel User Properties edits found for connection {connection_id}", flush=True)
+                    return None
+            else:
+                print(f"[DEBUG] Connection {connection_id} not found in Firebase", flush=True)
+                return None
+                
+        except Exception as e:
+            print(f"[ERROR] Failed to get Mixpanel Event Schema from Firebase: {str(e)}", flush=True)
+            return None
+          
+    def update_mixpanel_user_properties_edits(self, connection_id: str, mixpanel_user_properties_edits) -> bool:
+        """
+        Update Mixpanel User Properties in Firebase for a specific connection.
+        
+        Args:
+            connection_id (str): The connection ID to update Mixpanel User Properties for
+            mixpanel_user_properties_edits (Dict[str, Any]): The updated Mixpanel User Properties to save
+            
+        Returns:
+            bool: True if update was successful, False otherwise
+        """
+        try:
+            # Get user document reference
+            user_doc_ref = self.collection.document(connection_id)
+            
+            # Update the data_dictionary field
+            user_doc_ref.set({
+                "mixpanel_user_properties_edits": mixpanel_user_properties_edits
+            }, merge=True)
+            
+            print(f"[DEBUG] Successfully updated Mixpanel User Properties for connection {connection_id}", flush=True)
+            return True
+                
+        except Exception as e:
+            print(f"[ERROR] Failed to update Mixpanel User Properties in Firebase: {str(e)}", flush=True)
+            return False
+
+
 def embed_text(content: str) -> List[float]:
     client = genai.Client()
 

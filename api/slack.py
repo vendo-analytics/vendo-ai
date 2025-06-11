@@ -32,7 +32,7 @@ from google.genai.types import (
 from google.adk.runners import Runner
 from google.adk.agents import LiveRequestQueue
 from google.adk.agents.run_config import RunConfig
-from firebase_client import FirestoreSessionService, embed_text
+from api.agents.firebase_client import FirestoreSessionService, embed_text
 from fastapi import FastAPI, WebSocket, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles

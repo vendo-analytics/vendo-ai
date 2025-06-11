@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { CheckCirclFillIcon, CrossIcon, PlusIcon } from "./icons"
 import { toast } from "sonner"
-//import { addFirebaseContent } from "@/lib/firebase-content"
+import { addFirebaseContent } from "@/lib/firebase-content"
 import { useConnectionId } from "@/lib/connection-context"
 
 interface AddContextViewProps {
@@ -16,13 +16,23 @@ interface AddContextViewProps {
 }
 
 export function AddContextView({ onNavigateBack, onContentAdded }: AddContextViewProps) {
+  const [newTitle, setNewTitle] = useState("")
   const [newContent, setNewContent] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [titleError, setTitleError] = useState("")
 
   // Get the selected connection ID from global context
   const connectionId = useConnectionId()
 
+  // TODO: Make author dynamic/user-based in the future
+  const author = "system user"
+
   const handleAddContent = async () => {
+    if (!newTitle.trim()) {
+      setTitleError("Title is required")
+      return
+    }
+    setTitleError("")
     if (!newContent.trim()) {
       toast.error("Please enter some content")
       return
@@ -30,12 +40,10 @@ export function AddContextView({ onNavigateBack, onContentAdded }: AddContextVie
 
     setIsLoading(true)
     try {
-      console.log('Adding content with connection ID:', connectionId)
-      const result = await addFirebaseContent(connectionId, newContent.trim())
-      console.log('Content added successfully:', result)
+      await addFirebaseContent(connectionId, newTitle.trim(), newContent.trim(), author)
       toast.success("Content added successfully")
+      setNewTitle("")
       setNewContent("")
-      console.log('Calling onContentAdded callback')
       onContentAdded()
       onNavigateBack()
     } catch (error) {
@@ -47,10 +55,12 @@ export function AddContextView({ onNavigateBack, onContentAdded }: AddContextVie
   }
 
   const handleCancel = () => {
-    if (newContent.trim() && !confirm("Are you sure you want to cancel? Your changes will be lost.")) {
+    if ((newTitle.trim() || newContent.trim()) && !confirm("Are you sure you want to cancel? Your changes will be lost.")) {
       return
     }
+    setNewTitle("")
     setNewContent("")
+    setTitleError("")
     onNavigateBack()
   }
 
@@ -73,6 +83,22 @@ export function AddContextView({ onNavigateBack, onContentAdded }: AddContextVie
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-2">
+              <Label htmlFor="title" className="text-base font-medium">
+                Title <span className="text-destructive">*</span>
+              </Label>
+              <input
+                id="title"
+                type="text"
+                className="w-full border rounded px-3 py-2 text-base"
+                placeholder="Enter a title for this document"
+                value={newTitle}
+                onChange={e => setNewTitle(e.target.value)}
+                disabled={isLoading}
+                required
+              />
+              {titleError && <p className="text-sm text-destructive">{titleError}</p>}
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="content" className="text-base font-medium">
                 Content
               </Label>
@@ -90,7 +116,7 @@ export function AddContextView({ onNavigateBack, onContentAdded }: AddContextVie
             </div>
 
             <div className="flex gap-3 pt-4">
-              <Button onClick={handleAddContent} disabled={isLoading || !newContent.trim()} className="min-w-[120px]">
+              <Button onClick={handleAddContent} disabled={isLoading || !newTitle.trim() || !newContent.trim()} className="min-w-[120px]">
                 <CheckCirclFillIcon size={16} />
                 {isLoading ? "Adding..." : "Add Content"}
               </Button>

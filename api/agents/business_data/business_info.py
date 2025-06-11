@@ -4,9 +4,9 @@ from typing import Dict, Any, Optional
 from datetime import date
 from zoneinfo import ZoneInfo
 
-from ...firestore_instance import firestore_session_service
-from ...state_manager import get_current_connection_id
-from ...mixpanel_client import MixpanelClient
+from ..firestore_instance import firestore_session_service
+from ..state_manager import get_current_connection_id
+from ..mixpanel_client import MixpanelClient
 from fastapi.responses import JSONResponse
 
 # Fallback client information dictionary
@@ -26,6 +26,7 @@ FALLBACK_CLIENT_INFO: Dict[str, Any] = {
     
 }
 
+connection_id = "gb1uauyn0Khjcs4Fgxh8"
 
 def get_info(connection_id: str = None):
     """
@@ -47,12 +48,12 @@ def get_info(connection_id: str = None):
     # cached_context = get_business_context_from_state()
     # print(f"[DEBUG] Cached context: {cached_context}", flush=True)
     # cached_annotations = get_annotations_in_state()
-    mixpanel_annotations = get_annotations_from_mixpanel(connection_id)
+    # mixpanel_annotations = get_annotations_from_mixpanel(connection_id)
     
 
     # if cached_annotations:
     #     annotations = cached_annotations
-    if mixpanel_annotations:
+    '''  if mixpanel_annotations:
          annotations = mixpanel_annotations
     else:
          annotations = None
@@ -60,7 +61,7 @@ def get_info(connection_id: str = None):
     
     # if cached_context:
     #     return cached_context, annotations
-
+    '''
     firestore_business_context = firestore_session_service.get_business_context_from_firebase(connection_id)
     print(f"[DEBUG] Firestore business context: {firestore_business_context}", flush=True)
     #firestore_business_context = None
@@ -77,14 +78,14 @@ def get_info(connection_id: str = None):
         merged_info["current_date"] = date.today().strftime("%Y-%m-%d")
         
         print(f"[DEBUG] Using Firebase business_context for user {connection_id}", flush=True)
-        return merged_info, annotations
+        return merged_info #, annotations
     else:
         # Use fallback values
         fallback_info = FALLBACK_CLIENT_INFO.copy()
         fallback_info["current_date"] = date.today().strftime("%Y-%m-%d")
         
         print(f"[DEBUG] Using fallback client_info for user {connection_id}", flush=True)
-        return fallback_info, annotations
+        return fallback_info #, annotations
 
 
 

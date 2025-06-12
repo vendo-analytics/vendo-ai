@@ -26,6 +26,8 @@ import {
   MousePointerClick,
   CircleUserRound,
   MoreVertical,
+  Brain,
+  BarChart3,
 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useConnection } from "@/lib/connection-context"
@@ -186,6 +188,7 @@ interface ChatHistoryItem {
 }
 
 export type PageView =
+  | "dashboard"
   | "chat"
   | "business-context"
   | "mixpanel-event-schema"
@@ -194,6 +197,8 @@ export type PageView =
   | "add-context"
   | "data-dictionary"
   | "document-detail"
+  | "agents"
+  | "agent-detail"
 
 // Update the KnowledgeSidebarProps interface to include onContentRefresh and onDocumentClick
 interface KnowledgeSidebarProps {
@@ -439,6 +444,12 @@ export function KnowledgeSidebar({
           <SidebarGroupLabel>Company</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
+            <SidebarMenuItem>
+                <SidebarMenuButton onClick={() => onNavigate("dashboard")} isActive={currentView === "dashboard"}>
+                  <BarChart3 size={16} />
+                  <span>Dashboard</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton 
                   onClick={handleNewChat} 
@@ -446,6 +457,12 @@ export function KnowledgeSidebar({
                 >
                   <MessageCircle size={16} />
                   <span>Chat</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton onClick={() => onNavigate("agents")} isActive={currentView === "agents"}>
+                  <Brain size={16} />
+                  <span>AI Agents</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
 

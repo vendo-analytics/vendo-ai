@@ -21,8 +21,12 @@ import { toast } from "sonner"
 import { addFirebaseContent } from "@/lib/firebase-content"
 import { useConnectionId } from "@/lib/connection-context"
 import { MixpanelEventSchemaView } from "@/components/mixpanel-event-schema-view"
+import { AgentsView } from "@/components/agents-view"
+import { AgentDetailView } from "@/components/agent-detail-view"
+import { DashboardView } from "@/components/dashboard-view"
 
-type PageView =
+export type PageView =
+  | "dashboard"
   | "chat"
   | "business-context"
   | "mixpanel-event-schema"
@@ -31,6 +35,8 @@ type PageView =
   | "add-context"
   | "data-dictionary"
   | "document-detail"
+  | "agents"
+  | "agent-detail"
 
 function CustomSidebarTrigger() {
   const { toggleSidebar } = useSidebar()
@@ -84,13 +90,15 @@ async function deleteDocument(connectionId: string, index: number) {
 }
 
 export default function Page() {
-  const [currentView, setCurrentView] = useState<PageView>("chat")
+
+  const [currentView, setCurrentView] = useState<PageView>("dashboard")
   const [selectedChatId, setSelectedChatId] = useState<string>("001")
   const [chatMessages, setChatMessages] = useState<Message[]>([])
   const [selectedEvent, setSelectedEvent] = useState<any>(null)
   const [selectedDocument, setSelectedDocument] = useState<any>(null)
   const [contentRefreshTrigger, setContentRefreshTrigger] = useState(0)
   const [isDebugMode, setIsDebugMode] = useState(false)
+  const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
 
   // Use the connection context
   const connectionId = useConnectionId()
@@ -115,6 +123,8 @@ export default function Page() {
 
   const getPageTitle = () => {
     switch (currentView) {
+      case "dashboard":
+        return "Dashboard"
       case "business-context":
         return "Business Context"
       case "user-properties":
@@ -130,9 +140,25 @@ export default function Page() {
       case "mixpanel-event-schema":
         return "Mixpanel Event Schema"
       case "chat":
+      case "agents":
+        return "AI Agents"
+      case "agent-detail":
+        return "Agent Details"
       default:
         return "Vendo AI Demo"
     }
+  }
+  const handleAgentSelect = (agentId: string) => {
+    setSelectedAgent(agentId)
+    setCurrentView("agent-detail")
+  }
+  
+  const handleLaunchAgent = (agentId: string) => {
+    // Here you would implement the logic to launch/access the specific agent
+    console.log(`Launching agent: ${agentId}`)
+    toast.success(`Launching ${agentId} agent...`)
+    // For now, just navigate back to chat
+    setCurrentView("chat")
   }
 
   const handleContentAdded = useCallback(() => {
@@ -152,7 +178,7 @@ export default function Page() {
     setCurrentView("chat")
   }
 
-  const handleNavigate = (view: PageView) => {
+  const handleNavigate = (view: PageView, data?: any) => {
     setCurrentView(view)
   }
 
@@ -238,10 +264,24 @@ export default function Page() {
         </header>
           
         <div className="flex flex-1 flex-col">
+          {currentView === "dashboard" && (
+            <DashboardView onNavigate={handleNavigate} />
+          )}
+
           {currentView === "chat" && (
             <Chat 
               chatId={selectedChatId} 
               initialMessages={chatMessages}
+            />
+          )}
+          {currentView === "agents" && (
+            <AgentsView onAgentSelect={handleAgentSelect} />
+          )}
+          {currentView === "agent-detail" && selectedAgent && (
+            <AgentDetailView 
+              agentId={selectedAgent}
+              onBack={() => setCurrentView("agents")}
+              onLaunchAgent={handleLaunchAgent}
             />
           )}
           {currentView === "business-context" && <BusinessContextEditor />}

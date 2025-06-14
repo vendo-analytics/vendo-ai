@@ -868,3 +868,91 @@ async def update_mixpanel_event_schema(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) 
+
+
+
+@app.get("/api/mixpanel-events/query")
+async def query_mixpanel_events(connection_id: str = Query(...)):
+    """
+    Query the Mixpanel Event Schema to return all events, descriptions, and properties
+    in a structured format suitable for analysis.
+    
+    Args:
+        connection_id (str): The connection ID to fetch data for
+        
+    Returns:
+        dict: Structured event schema with events, descriptions, and properties
+    """
+    try:
+        from .agents.sub_agents.data_retrieval.tools import query_mixpanel_event_schema
+        result = query_mixpanel_event_schema(connection_id)
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/mixpanel-events/event/{event_name}")
+async def get_mixpanel_event_by_name(event_name: str, connection_id: str = Query(...)):
+    """
+    Get a specific event by name from the schema.
+    
+    Args:
+        event_name (str): The name of the event to retrieve
+        connection_id (str): The connection ID to fetch data for
+        
+    Returns:
+        dict: Event information or 404 if not found
+    """
+    try:
+        from .agents.sub_agents.data_retrieval.tools import get_event_by_name
+        result = get_event_by_name(event_name, connection_id)
+        
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"Event '{event_name}' not found")
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/mixpanel-events/property/{property_name}")
+async def get_mixpanel_events_by_property(property_name: str, connection_id: str = Query(...)):
+    """
+    Get all events that contain a specific property.
+    
+    Args:
+        property_name (str): The name of the property to search for
+        connection_id (str): The connection ID to fetch data for
+        
+    Returns:
+        list: List of events that contain the specified property
+    """
+    try:
+        from .agents.sub_agents.data_retrieval.tools import get_events_by_property
+        result = get_events_by_property(property_name, connection_id)
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/mixpanel-events/search")
+async def search_mixpanel_events_by_description(search_term: str = Query(...), connection_id: str = Query(...)):
+    """
+    Search for events by description content.
+    
+    Args:
+        search_term (str): The term to search for in event descriptions
+        connection_id (str): The connection ID to fetch data for
+        
+    Returns:
+        list: List of events whose descriptions contain the search term
+    """
+    try:
+        from .agents.sub_agents.data_retrieval.tools import search_events_by_description
+        result = search_events_by_description(search_term, connection_id)
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) 

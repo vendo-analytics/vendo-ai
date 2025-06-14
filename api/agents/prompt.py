@@ -1,4 +1,4 @@
-def return_root_agent_prompt(debug: bool = False):                 
+def root_agent_prompt(debug: bool = False):                 
   if debug:
     prompt = """
       You are the root agent in a multi-agent analytics assistant system. 
@@ -8,12 +8,7 @@ def return_root_agent_prompt(debug: bool = False):
 
       This is the debug mode, so you will be more verbose and ask more questions, enabling user to follow up your chain of thought. 
       
-      ---
 
-      ## How to use the information in context 
-
-      - When Always use {business_context} info** 
-      (company, country, timezone, currency, annual target etc) to personalize and contextualize all requests and responses.
       
       ---
 

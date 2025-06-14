@@ -11,8 +11,8 @@ from fastapi.responses import JSONResponse
 
 # Fallback client information dictionary
 FALLBACK_CLIENT_INFO: Dict[str, Any] = {
-    "name": "Yalcin Kaya",
-    "preferred_name": "Yalcin", 
+    "name": "Mr Fallback Guy",
+    "preferred_name": "Fallback Guy", 
     "user_id": "test_user",
     "company_name": "Growth Analytics Marketing",
     "company_short": "GAM",
@@ -26,9 +26,7 @@ FALLBACK_CLIENT_INFO: Dict[str, Any] = {
     
 }
 
-connection_id = "gb1uauyn0Khjcs4Fgxh8"
-
-def get_info(connection_id: str = None):
+def get_business_context(connection_id: str = None):
     """
     Get the client information dictionary from Firebase with fallback to hardcoded values.
     Uses the provided connection_id or falls back to current connection_id from global state.

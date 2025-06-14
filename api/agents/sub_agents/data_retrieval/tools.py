@@ -11,6 +11,8 @@ import json
 from google.cloud import bigquery
 from google.oauth2 import service_account
 import os
+from ...firestore_instance import firestore_session_service
+from ...state_manager import get_current_connection_id
 
 
 def convert_dates_to_strings(obj):
@@ -206,3 +208,257 @@ def build_chart(
         error_msg = f"❌ Error building chart: {str(e)}"
         print(error_msg)
         return error_msg 
+
+def query_mixpanel_event_schema(connection_id: Optional[str] = None):
+    """
+    Query the combined Mixpanel Event Schema to return all events, descriptions, and properties
+    in a structured format suitable for analysis and querying.
+    
+    Use this tool to:
+    - Get an overview of all available events and their properties
+    - Understand what data is available for analysis
+    - Find event names and property names for building queries
+    
+    Args:
+        connection_id (Optional[str]): The connection ID to fetch data for. 
+                                     If not provided, uses current connection.
+        
+    Returns:
+        dict: Structured event schema with events, descriptions, and properties
+        
+    Example usage:
+        schema = query_mixpanel_event_schema()
+        print(f"Found {schema['total_events']} events")
+    """
+    if connection_id is None:
+        connection_id = get_current_connection_id()
+    
+    print(f"[DEBUG] query_mixpanel_event_schema using connection_id: {connection_id}", flush=True)
+        
+    try:
+        # Get base schema (left table)
+        base_schema = firestore_session_service.get_mixpanel_event_schema(connection_id) or {"events": {}}
+        print(f"[DEBUG] Base schema has {len(base_schema.get('events', {}))} events", flush=True)
+        
+        # Get user edits (right table for join)
+        user_edits = firestore_session_service.get_mixpanel_event_schema_edits(connection_id) or {"events": {}}
+        print(f"[DEBUG] User edits has {len(user_edits.get('events', {}))} events", flush=True)
+        
+        # Structure to return
+        result = {
+            "events": [],
+            "total_events": 0,
+            "total_properties": 0
+        }
+        
+        # Combine base schema with user edits
+        for event_name, event_data in base_schema.get("events", {}).items():
+            combined_event = {
+                "event_name": event_name,
+                "description": event_data.get("description", ""),
+                "first_seen": event_data.get("first_seen"),
+                "last_seen": event_data.get("last_seen"),
+                "last_30_day_count": event_data.get("last_30_day_count", 0),
+                "status": event_data.get("status", "unknown"),
+                "properties": []
+            }
+            
+            # Apply user edits to event description if available
+            if event_name in user_edits.get("events", {}):
+                user_event_edits = user_edits["events"][event_name]
+                if user_event_edits.get("description"):
+                    combined_event["description"] = user_event_edits["description"]
+            
+            # Process properties
+            for prop_name, prop_data in event_data.get("properties", {}).items():
+                combined_property = {
+                    "property_name": prop_name,
+                    "description": prop_data.get("description", ""),
+                    "data_type": prop_data.get("data_type", "unknown"),
+                    "sample_values": prop_data.get("sample_values", []),
+                    "is_required": prop_data.get("is_required", False)
+                }
+                
+                # Apply user edits to property if available
+                if (event_name in user_edits.get("events", {}) and 
+                    prop_name in user_edits["events"][event_name].get("properties", {})):
+                    user_prop_edits = user_edits["events"][event_name]["properties"][prop_name]
+                    if user_prop_edits.get("description"):
+                        combined_property["description"] = user_prop_edits["description"]
+                    if user_prop_edits.get("data_type"):
+                        combined_property["data_type"] = user_prop_edits["data_type"]
+                
+                combined_event["properties"].append(combined_property)
+            
+            result["events"].append(combined_event)
+            result["total_properties"] += len(combined_event["properties"])
+        
+        result["total_events"] = len(result["events"])
+        print(f"[DEBUG] Final result: {result['total_events']} events, {result['total_properties']} properties", flush=True)
+        return result
+        
+    except Exception as e:
+        print(f"[ERROR] Failed to query event schema: {str(e)}", flush=True)
+        return {"events": [], "total_events": 0, "total_properties": 0, "error": str(e)}
+
+def get_event_by_name(event_name: str, connection_id: Optional[str] = None):
+    """
+    Get detailed information about a specific event by name from the schema.
+    
+    Use this tool to:
+    - Get details about a specific event (description, properties, etc.)
+    - Understand what properties are available for a specific event
+    - Validate if an event exists before building queries
+    
+    Args:
+        event_name (str): The name of the event to retrieve (e.g., "Order Received", "Page Viewed")
+        connection_id (Optional[str]): The connection ID to fetch data for.
+                                     If not provided, uses current connection.
+        
+    Returns:
+        dict: Event details including properties, or None if not found
+        
+    Example usage:
+        event = get_event_by_name("Order Received")
+        if event:
+            print(f"Event has {len(event['properties'])} properties")
+    """
+    if connection_id is None:
+        connection_id = get_current_connection_id()
+    
+    print(f"[DEBUG] get_event_by_name searching for '{event_name}' using connection_id: {connection_id}", flush=True)
+        
+    schema = query_mixpanel_event_schema(connection_id)
+    
+    for event in schema.get("events", []):
+        if event["event_name"].lower() == event_name.lower():
+            print(f"[DEBUG] Found event: {event['event_name']}", flush=True)
+            return event
+    
+    print(f"[DEBUG] Event '{event_name}' not found", flush=True)
+    return None
+
+def get_events_by_property(property_name: str, connection_id: Optional[str] = None):
+    """
+    Find all events that contain a specific property name.
+    
+    Use this tool to:
+    - Find which events contain a specific property (e.g., "order_id", "product_id")
+    - Understand data relationships across events
+    - Validate property availability before building queries
+    
+    Args:
+        property_name (str): The name of the property to search for (e.g., "order_id", "product_id")
+        connection_id (Optional[str]): The connection ID to fetch data for.
+                                     If not provided, uses current connection.
+        
+    Returns:
+        list: Events that contain the specified property
+        
+    Example usage:
+        events = get_events_by_property("order_id")
+        print(f"Found {len(events)} events with 'order_id' property")
+    """
+    if connection_id is None:
+        connection_id = get_current_connection_id()
+    
+    print(f"[DEBUG] get_events_by_property searching for property '{property_name}' using connection_id: {connection_id}", flush=True)
+        
+    schema = query_mixpanel_event_schema(connection_id)
+    matching_events = []
+    
+    for event in schema.get("events", []):
+        for prop in event.get("properties", []):
+            if prop["property_name"].lower() == property_name.lower():
+                matching_events.append(event)
+                break
+    
+    print(f"[DEBUG] Found {len(matching_events)} events with property '{property_name}'", flush=True)
+    return matching_events
+
+def search_events_by_description(search_term: str, connection_id: Optional[str] = None):
+    """
+    Search for events by keywords in their descriptions.
+    
+    Use this tool to:
+    - Find events related to specific business processes (e.g., "checkout", "payment")
+    - Discover relevant events when building queries
+    - Explore available events by functionality
+    
+    Args:
+        search_term (str): Keywords to search for in event descriptions (e.g., "checkout", "payment")
+        connection_id (Optional[str]): The connection ID to fetch data for.
+                                     If not provided, uses current connection.
+        
+    Returns:
+        list: Events whose descriptions contain the search term
+        
+    Example usage:
+        events = search_events_by_description("checkout")
+        print(f"Found {len(events)} events related to checkout")
+    """
+    if connection_id is None:
+        connection_id = get_current_connection_id()
+    
+    print(f"[DEBUG] search_events_by_description searching for '{search_term}' using connection_id: {connection_id}", flush=True)
+        
+    schema = query_mixpanel_event_schema(connection_id)
+    matching_events = []
+    
+    search_term_lower = search_term.lower()
+    
+    for event in schema.get("events", []):
+        description = event.get("description") or ""
+        if search_term_lower in description.lower():
+            matching_events.append(event)
+    
+    print(f"[DEBUG] Found {len(matching_events)} events with description containing '{search_term}'", flush=True)
+    return matching_events 
+
+def debug_connection_info():
+    """
+    Debug function to show current connection ID and basic schema information.
+    Use this to troubleshoot connection and data availability issues.
+    
+    Returns:
+        dict: Debug information about connection and available data
+    """
+    connection_id = get_current_connection_id()
+    print(f"[DEBUG] Current connection ID: {connection_id}", flush=True)
+    
+    try:
+        # Test base schema access
+        base_schema = firestore_session_service.get_mixpanel_event_schema(connection_id)
+        base_events_count = len(base_schema.get("events", {})) if base_schema else 0
+        
+        # Test user edits access  
+        user_edits = firestore_session_service.get_mixpanel_event_schema_edits(connection_id)
+        user_edits_count = len(user_edits.get("events", {})) if user_edits else 0
+        
+        debug_info = {
+            "connection_id": connection_id,
+            "base_schema_available": base_schema is not None,
+            "base_events_count": base_events_count,
+            "user_edits_available": user_edits is not None,
+            "user_edits_count": user_edits_count,
+            "firestore_service_available": firestore_session_service is not None
+        }
+        
+        print(f"[DEBUG] Connection info: {debug_info}", flush=True)
+        
+        # Show first few event names if available
+        if base_schema and base_schema.get("events"):
+            event_names = list(base_schema["events"].keys())[:5]
+            print(f"[DEBUG] First 5 event names: {event_names}", flush=True)
+            debug_info["sample_event_names"] = event_names
+        
+        return debug_info
+        
+    except Exception as e:
+        error_info = {
+            "connection_id": connection_id,
+            "error": str(e),
+            "firestore_service_available": firestore_session_service is not None
+        }
+        print(f"[ERROR] Debug connection info failed: {error_info}", flush=True)
+        return error_info 

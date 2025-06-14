@@ -14,6 +14,9 @@ from typing import List, Optional
 from vertexai.language_models import TextEmbeddingModel
 from google import genai
 from google.genai import types
+import json
+from google.cloud import bigquery
+from datetime import datetime
 
 
 _table_users = 'vendo_users'
@@ -538,6 +541,60 @@ class FirestoreSessionService(BaseSessionService):
         except Exception as e:
             print(f"[ERROR] Failed to update Mixpanel User Properties in Firebase: {str(e)}", flush=True)
             return False
+
+
+
+    def get_mixpanel_user_properties_raw(self, connection_id: str = "001"):
+        """
+        Get raw Mixpanel User Properties from BigQuery for a specific connection.
+        
+        Args:
+            connection_id (str): The connection ID to fetch data for
+            
+        Returns:
+            List[dict]: Raw user properties from BigQuery or empty list if error
+        """
+        try:
+            client = bigquery.Client()
+            dataset_id = self.get_mixpanel_dataset_id(connection_id)
+            
+            if not dataset_id:
+                print(f"[ERROR] No dataset ID found for connection {connection_id}", flush=True)
+                return []
+
+            # Load raw user properties from BigQuery
+            query = f"""
+                SELECT event_name, name, 
+                       CASE WHEN type = 'nan' THEN 'Unknown' ELSE type END as type,
+                       CASE WHEN description = 'nan' THEN 'No description available' ELSE description END as description,
+                       sample_value
+                FROM `{dataset_id}.event_properties_data`
+                WHERE event_name = '$user'
+                ORDER BY name ASC
+            """
+            
+            results = client.query(query).result()
+            
+            properties = []
+            for row in results:
+                properties.append({
+                    "event_name": row.event_name,
+                    "name": row.name,
+                    "type": row.type,
+                    "description": row.description,
+                    "sample_value": row.sample_value
+                })
+            
+            print(f"[DEBUG] Successfully loaded {len(properties)} raw user properties for connection {connection_id}", flush=True)
+            return properties
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to get raw user properties from BigQuery: {str(e)}", flush=True)
+            return []
+
+
+
+
 
 
 def embed_text(content: str) -> List[float]:

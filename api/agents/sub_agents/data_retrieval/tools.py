@@ -1,5 +1,6 @@
 from typing import Dict, List, Optional, TypedDict, Any
 from datetime import datetime, date
+from decimal import Decimal
 import pandas as pd
 from langgraph.graph import Graph, StateGraph
 from langgraph.checkpoint.memory import InMemorySaver
@@ -15,16 +16,18 @@ from ...firestore_instance import firestore_session_service
 from ...state_manager import get_current_connection_id
 
 
-def convert_dates_to_strings(obj):
+def convert_to_json_serializable(obj):
     """
-    Recursively convert date/datetime objects to strings for JSON serialization.
+    Recursively convert non-JSON-serializable objects (dates, decimals) to serializable types.
     """
     if isinstance(obj, (date, datetime)):
         return obj.isoformat()
+    elif isinstance(obj, Decimal):
+        return float(obj)
     elif isinstance(obj, dict):
-        return {key: convert_dates_to_strings(value) for key, value in obj.items()}
+        return {key: convert_to_json_serializable(value) for key, value in obj.items()}
     elif isinstance(obj, list):
-        return [convert_dates_to_strings(item) for item in obj]
+        return [convert_to_json_serializable(item) for item in obj]
     else:
         return obj
 
@@ -69,8 +72,8 @@ def query_bigquery(query: str) -> dict:
         df = query_job.result(timeout=60).to_dataframe()
         result_data = df.to_dict(orient="records")
         
-        # Convert date objects to strings for JSON serialization
-        result_data = convert_dates_to_strings(result_data)
+        # Convert non-JSON-serializable objects to serializable types
+        result_data = convert_to_json_serializable(result_data)
 
         if not result_data:
             return {
@@ -415,50 +418,151 @@ def search_events_by_description(search_term: str, connection_id: Optional[str] 
     print(f"[DEBUG] Found {len(matching_events)} events with description containing '{search_term}'", flush=True)
     return matching_events 
 
-def debug_connection_info():
+def query_mixpanel_user_schema(connection_id: Optional[str] = None):
     """
-    Debug function to show current connection ID and basic schema information.
-    Use this to troubleshoot connection and data availability issues.
+    Query the combined Mixpanel User Schema to return all user properties and their details
+    in a structured format suitable for analysis and querying.
     
+    Use this tool to:
+    - Get an overview of all available user properties
+    - Understand what user data is available for analysis
+    - Find user property names for building queries
+    
+    Args:
+        connection_id (Optional[str]): The connection ID to fetch data for. 
+                                     If not provided, uses current connection.
+        
     Returns:
-        dict: Debug information about connection and available data
+        dict: Structured user schema with properties and details
+        
+    Example usage:
+        schema = query_mixpanel_user_schema()
+        print(f"Found {schema['total_properties']} user properties")
     """
-    connection_id = get_current_connection_id()
-    print(f"[DEBUG] Current connection ID: {connection_id}", flush=True)
+    if connection_id is None:
+        connection_id = get_current_connection_id()
     
+    print(f"[DEBUG] query_mixpanel_user_schema using connection_id: {connection_id}", flush=True)
+        
     try:
-        # Test base schema access
-        base_schema = firestore_session_service.get_mixpanel_event_schema(connection_id)
-        base_events_count = len(base_schema.get("events", {})) if base_schema else 0
+        # Get raw user properties from BigQuery
+        raw_properties = firestore_session_service.get_mixpanel_user_properties_raw(connection_id) or []
+        print(f"[DEBUG] Raw user properties has {len(raw_properties)} properties", flush=True)
         
-        # Test user edits access  
-        user_edits = firestore_session_service.get_mixpanel_event_schema_edits(connection_id)
-        user_edits_count = len(user_edits.get("events", {})) if user_edits else 0
+        # Get user edits (Firebase edits)
+        user_edits = firestore_session_service.get_mixpanel_user_properties_edits(connection_id) or {}
+        print(f"[DEBUG] User edits has {len(user_edits)} properties", flush=True)
         
-        debug_info = {
-            "connection_id": connection_id,
-            "base_schema_available": base_schema is not None,
-            "base_events_count": base_events_count,
-            "user_edits_available": user_edits is not None,
-            "user_edits_count": user_edits_count,
-            "firestore_service_available": firestore_session_service is not None
+        # Structure to return
+        result = {
+            "properties": [],
+            "total_properties": 0
         }
         
-        print(f"[DEBUG] Connection info: {debug_info}", flush=True)
+        # Combine raw properties with user edits
+        for raw_prop in raw_properties:
+            property_name = raw_prop.get("name")
+            combined_property = {
+                "property_name": property_name,
+                "description": raw_prop.get("description", ""),
+                "data_type": raw_prop.get("type", "unknown"),
+                "sample_values": [raw_prop.get("sample_value")] if raw_prop.get("sample_value") else [],
+                "is_required": False,  # Not available in raw data
+                "first_seen": None,    # Not available in raw data
+                "last_seen": None,     # Not available in raw data
+                "status": "active"     # Default status
+            }
+            
+            # Apply user edits to property if available
+            if property_name in user_edits:
+                user_property_edits = user_edits[property_name]
+                if user_property_edits.get("description"):
+                    combined_property["description"] = user_property_edits["description"]
+                if user_property_edits.get("type"):
+                    combined_property["data_type"] = user_property_edits["type"]
+            
+            result["properties"].append(combined_property)
         
-        # Show first few event names if available
-        if base_schema and base_schema.get("events"):
-            event_names = list(base_schema["events"].keys())[:5]
-            print(f"[DEBUG] First 5 event names: {event_names}", flush=True)
-            debug_info["sample_event_names"] = event_names
-        
-        return debug_info
+        result["total_properties"] = len(result["properties"])
+        print(f"[DEBUG] Final result: {result['total_properties']} user properties", flush=True)
+        return result
         
     except Exception as e:
-        error_info = {
-            "connection_id": connection_id,
-            "error": str(e),
-            "firestore_service_available": firestore_session_service is not None
-        }
-        print(f"[ERROR] Debug connection info failed: {error_info}", flush=True)
-        return error_info 
+        print(f"[ERROR] Failed to query user schema: {str(e)}", flush=True)
+        return {"properties": [], "total_properties": 0, "error": str(e)}
+
+def get_user_property_by_name(property_name: str, connection_id: Optional[str] = None):
+    """
+    Get detailed information about a specific user property by name from the schema.
+    
+    Use this tool to:
+    - Get details about a specific user property (description, data type, etc.)
+    - Validate if a user property exists before building queries
+    - Understand what values are available for a specific user property
+    
+    Args:
+        property_name (str): The name of the user property to retrieve (e.g., "total_spent", "city")
+        connection_id (Optional[str]): The connection ID to fetch data for.
+                                     If not provided, uses current connection.
+        
+    Returns:
+        dict: User property details, or None if not found
+        
+    Example usage:
+        property = get_user_property_by_name("total_spent")
+        if property:
+            print(f"Property type: {property['data_type']}")
+    """
+    if connection_id is None:
+        connection_id = get_current_connection_id()
+    
+    print(f"[DEBUG] get_user_property_by_name searching for '{property_name}' using connection_id: {connection_id}", flush=True)
+        
+    schema = query_mixpanel_user_schema(connection_id)
+    
+    for prop in schema.get("properties", []):
+        if prop["property_name"].lower() == property_name.lower():
+            print(f"[DEBUG] Found user property: {prop['property_name']}", flush=True)
+            return prop
+    
+    print(f"[DEBUG] User property '{property_name}' not found", flush=True)
+    return None
+
+def search_user_properties_by_description(search_term: str, connection_id: Optional[str] = None):
+    """
+    Search for user properties by keywords in their descriptions.
+    
+    Use this tool to:
+    - Find user properties related to specific attributes (e.g., "marketing", "location")
+    - Discover relevant user properties when building queries
+    - Explore available user properties by functionality
+    
+    Args:
+        search_term (str): Keywords to search for in property descriptions (e.g., "marketing", "location")
+        connection_id (Optional[str]): The connection ID to fetch data for.
+                                     If not provided, uses current connection.
+        
+    Returns:
+        list: User properties whose descriptions contain the search term
+        
+    Example usage:
+        properties = search_user_properties_by_description("marketing")
+        print(f"Found {len(properties)} user properties related to marketing")
+    """
+    if connection_id is None:
+        connection_id = get_current_connection_id()
+    
+    print(f"[DEBUG] search_user_properties_by_description searching for '{search_term}' using connection_id: {connection_id}", flush=True)
+        
+    schema = query_mixpanel_user_schema(connection_id)
+    matching_properties = []
+    
+    search_term_lower = search_term.lower()
+    
+    for prop in schema.get("properties", []):
+        description = prop.get("description") or ""
+        if search_term_lower in description.lower():
+            matching_properties.append(prop)
+    
+    print(f"[DEBUG] Found {len(matching_properties)} user properties with description containing '{search_term}'", flush=True)
+    return matching_properties 

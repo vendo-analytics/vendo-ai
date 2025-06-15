@@ -38,19 +38,64 @@ Before generating SQL queries, use these tools to understand the available data:
 - **Returns**: List of events whose descriptions contain the search term
 - **Example**: `events = search_events_by_description("checkout")` finds all checkout-related events
 
+### 5. `query_mixpanel_user_schema()`
+- **Purpose**: Get an overview of all available user properties and their details
+- **Use when**: You need to understand what user properties are available for analysis
+- **Returns**: Complete schema with all user properties, descriptions, and data types
+- **Example**: `schema = query_mixpanel_user_schema()` returns all user properties with their details
+
+### 6. `get_user_property_by_name(property_name)`
+- **Purpose**: Get detailed information about a specific user property
+- **Use when**: You need to validate a user property exists or see its details
+- **Parameters**: 
+  - `property_name`: The exact name of the user property (e.g., "total_spent", "city")
+- **Returns**: User property details including data type and description, or None if not found
+- **Example**: `property = get_user_property_by_name("total_spent")` gets details for the total_spent property
+
+### 7. `search_user_properties_by_description(search_term)`
+- **Purpose**: Find user properties by keywords in their descriptions
+- **Use when**: You need to find user properties related to specific attributes
+- **Parameters**: 
+  - `search_term`: Keywords to search for (e.g., "marketing", "location", "revenue")
+- **Returns**: List of user properties whose descriptions contain the search term
+- **Example**: `properties = search_user_properties_by_description("marketing")` finds all marketing-related user properties
+
 ## Schema Query Workflow
 
-1. **Start with schema exploration**: Use `query_mixpanel_event_schema()` to understand available events
-2. **Validate specific events**: Use `get_event_by_name()` to confirm event names and see their properties
-3. **Find related events**: Use `search_events_by_description()` to discover events by business process
+1. **Start with schema exploration**: 
+   - Use `query_mixpanel_event_schema()` to understand available events
+   - Use `query_mixpanel_user_schema()` to understand available user properties
+2. **Validate specific events/properties**: 
+   - Use `get_event_by_name()` to confirm event names and see their properties
+   - Use `get_user_property_by_name()` to confirm user property names and details
+3. **Find related data**: 
+   - Use `search_events_by_description()` to discover events by business process
+   - Use `search_user_properties_by_description()` to find user properties by functionality
 4. **Check property availability**: Use `get_events_by_property()` to see which events have specific properties
-5. **Build your SQL query**: Use the discovered event names and properties in your BigQuery SQL
+5. **Build your SQL query**: Use the discovered event names, user properties, and event properties in your BigQuery SQL
 
 ## Important Notes About Schema Tools
 - These tools query the current connection's schema, so they reflect the actual data available
 - Event names are case-sensitive in the final SQL queries, so use the exact names returned by these tools
 - Property names should also match exactly what's returned by the schema tools
 - Use these tools whenever you're unsure about event names, property names, or data availability
+
+## BigQuery JSON Handling and Dataset Structure
+
+### Event Dataset Structure
+- **All event properties are stored in a JSON `properties` object** in the event table
+- **Products data is stored as an array** under `properties.products`
+- **Mixpanel reserved properties** (like `$city`, `$current_url`, `$created`) must be referenced with quotes in JSON_VALUE: `JSON_VALUE(properties, '$."$city"')`
+- **Regular properties** can be referenced without quotes: `JSON_VALUE(properties, '$.cart_total_amount')`
+
+### JSON Data Type Handling
+- **For numeric operations** (SUM, AVG, etc.), always cast JSON values: `CAST(JSON_VALUE(properties, '$.cart_total_amount') AS NUMERIC)`
+- **For string operations**, JSON_VALUE returns strings by default
+- **For product array analysis**, use UNNEST: `UNNEST(JSON_EXTRACT_ARRAY(properties.products)) AS product`
+
+### Date Range Variables
+- **`@start_date` and `@end_date`** are parameterized variables set by user input or default to the last 30 days
+- **In live mode**, insert actual date values in `YYYY-MM-DD` format directly into queries instead of using these variables
 
 
 ## Query Plan Guided SQL Generation
@@ -106,7 +151,7 @@ Database admin instructions (please *unconditionally* follow these instructions.
 
 16. **Date Functions** 
    - DO NOT USE CURRENT_DATE()Instead print out the current date in format YYYY-MM-DD. 
-   - For Date interval questions here's an example where clause: "DATE(event_time) BETWEEN DATE_SUB(DATE('2025-05-28'), INTERVAL 12 MONTH) AND DATE('2025-05-28') 
+   - For Date interval questions here's an example where clause: "DATE(time) BETWEEN DATE_SUB(DATE('2025-05-28'), INTERVAL 12 MONTH) AND DATE('2025-05-28') 
 
 17. **Numeric Formatting:**
    - Always round numeric values (revenue, amounts, averages, percentages, etc.) to two decimal places using `ROUND(value, 2)` for better readability and consistency.
@@ -226,108 +271,150 @@ Database admin instructions (please *unconditionally* follow these instructions.
 
 ## Sample Output Format
 
+### Brief explanation of what the query does  
 **SQL Query:**
 ```sql
 -- [SQL here]
 ```
 
-**Explanation:**  
-[Brief explanation of what the query does]
+## Examples
 
-
-
-## Worked Examples
-
-### Example 1: Total Revenue for April 2025
+### Orders
+# How to calculate, order level metrics for a period, segmented by city, region, and country
 **SQL Query:**
 ```sql
-  SELECT SUM(CAST(amount AS FLOAT64)) AS total_revenue
-  FROM `{event_dataset}`
-  WHERE event = 'Order Received'
-    AND event_time BETWEEN @start_date AND @end_date
-```
-**Explanation:**
-Returns the total revenue from 'Order Received' events in the specified date range. `@start_date` and `@end_date` are variables set by user input or default to the last 30 days.
-
-### Example 2: Number of Orders in a Date Range
-**SQL Query:**
-```sql
-SELECT COUNT(*) AS order_count
+SELECT
+  JSON_VALUE(properties, '$."$city"') AS city,
+  JSON_VALUE(properties, '$."$region"') AS region,
+  JSON_VALUE(properties, '$.shipping_address.country') AS country,
+  ROUND(SUM(CAST(JSON_VALUE(properties, '$.cart_total_amount') AS NUMERIC)), 2) AS total_revenue,
+  ROUND(AVG(CAST(JSON_VALUE(properties, '$.cart_total_amount') AS NUMERIC)), 2) AS avg_order_value,
+  COUNT(*) AS order_count
 FROM `{event_dataset}`
 WHERE event = 'Order Received'
   AND event_time BETWEEN @start_date AND @end_date
+GROUP BY 1,2,3
 ```
-**Explanation:**
-Returns the number of 'Order Received' events in the specified date range. Dates are parameterized.
 
-### Example 3: Average Order Value by Campaign (Date Range)
-**SQL Query:**
-```sql
-SELECT u.utm_campaign, AVG(CAST(e.amount AS FLOAT64)) AS avg_order_value
-FROM `{event_dataset}` e
-JOIN `{user_property_dataset}` u ON e.distinct_id = u.distinct_id
-WHERE e.event = 'Order Received'
-  AND e.event_time BETWEEN @start_date AND @end_date
-GROUP BY u.utm_campaign
-```
-**Explanation:**
-Returns the average order value by the user's `utm_campaign` for 'Order Received' events in the specified date range. Dates are parameterized.
-
-### Example 4: Orders from Customers Who Signed Up in a Date Range
-**SQL Query:**
-```sql
-SELECT e.*
-FROM `{event_dataset}` e
-JOIN `{user_property_dataset}` u ON e.distinct_id = u.distinct_id
-WHERE e.event = 'Order Received'
-  AND u.first_seen BETWEEN @start_date AND @end_date
-```
-**Explanation:**
-Returns all 'Order Received' events from customers who signed up in the specified date range. Dates are parameterized.
-
-### Example 5: Product Views and Average Product Views per User, Grouped by Month of First Account Creation
+### Products
+# How to analyse orders on a product level. Unnests the products array in the properties column.
 **SQL Query:**
 ```sql
 SELECT
-  FORMAT_DATE('%Y-%m', DATE(u.mp_reserved_created)) AS account_created_month,
-  COUNT(DISTINCT u.distinct_id) AS user_count,
-  COUNT(e.event) AS product_views,
-  SAFE_DIVIDE(COUNT(e.event), COUNT(DISTINCT u.distinct_id)) AS avg_product_views_per_user
-FROM `{user_property_dataset}` u
-LEFT JOIN `{event_dataset}` e
-  ON u.distinct_id = e.distinct_id
-  AND e.event = 'Product Viewed'
-  AND e.event_time BETWEEN @start_date AND @end_date
-GROUP BY account_created_month
-ORDER BY account_created_month
+  event_time,
+  JSON_VALUE(properties, '$.shopify_order_id') AS shopify_order_id,
+  JSON_VALUE(product, '$.title') AS title,
+  JSON_VALUE(product, '$.id') AS id,
+  CAST(JSON_VALUE(product, '$.price') AS NUMERIC) AS price,
+  JSON_VALUE(product, '$.product_type') AS product_type,
+  CAST(JSON_VALUE(product, '$.quantity') AS NUMERIC) AS quantity,
+  JSON_VALUE(product, '$.sku') AS sku,
+  JSON_VALUE(product, '$.variant_id') AS variant_id,
+  CAST(JSON_VALUE(product, '$.variant_price') AS NUMERIC) AS variant_price,
+  JSON_VALUE(product, '$.variant_sku') AS variant_sku,
+  JSON_VALUE(product, '$.variant_title') AS variant_title,
+  JSON_VALUE(product, '$.variant_title') AS product_title,
+  CAST(JSON_VALUE(product, '$.variant_unit_cost') AS NUMERIC) AS variant_unit_cost,
+  JSON_VALUE(product, '$.vendor') AS vendor
+FROM `{event_dataset}`,
+  UNNEST(JSON_EXTRACT_ARRAY(properties.products)) AS product
+WHERE event = 'Order Received'
+  AND event_time BETWEEN @start_date AND @end_date
 ```
-**Explanation:**
-For each cohort of users grouped by the month their account was created, this query returns user count, product views, and average product views per user for the specified date range. Dates are parameterized.
 
-### Example 6: Funnel Analysis - Product Viewed to Order Received
+### Example 3: 
+Show user properties for customers in the user table.
 **SQL Query:**
 ```sql
-WITH product_viewers AS (
-  SELECT DISTINCT distinct_id
-  FROM `{event_dataset}`
-  WHERE event = 'Product Viewed'
-    AND event_time BETWEEN @start_date AND @end_date
-),
-order_receivers AS (
-  SELECT DISTINCT distinct_id
-  FROM `{event_dataset}`
-  WHERE event = 'Order Received'
-    AND event_time BETWEEN @start_date AND @end_date
-)
 SELECT
-  (SELECT COUNT(*) FROM product_viewers) AS product_viewers,
-  (SELECT COUNT(*) FROM order_receivers) AS order_receivers,
-  (SELECT COUNT(*) FROM product_viewers WHERE distinct_id IN (SELECT distinct_id FROM order_receivers)) AS converted_users
+  JSON_VALUE(properties, '$."$created"') AS created,
+  JSON_VALUE(properties, '$."$email"') AS email,
+  JSON_VALUE(properties, '$."$first_name"') AS first_name,
+  JSON_VALUE(properties, '$."$last_name"') AS last_name,
+  JSON_VALUE(properties, '$."$last_seen"') AS last_seen,
+  JSON_VALUE(properties, '$."$user_id"') AS user_id,
+  JSON_VALUE(properties, '$.customer_tags') AS customer_tags,
+  JSON_VALUE(properties, '$.email_marketing_consent_opt_in_level') AS email_marketing_consent_opt_in_level,
+  JSON_VALUE(properties, '$.email_marketing_consent_state') AS email_marketing_consent_state,
+  JSON_VALUE(properties, '$.first_order_date') AS first_order_date,
+  JSON_VALUE(properties, '$.last_order_date') AS last_order_date,
+  JSON_VALUE(properties, '$.marketing_state') AS marketing_state,
+  CAST(JSON_VALUE(properties, '$.order_count') AS NUMERIC) AS order_count,
+  JSON_VALUE(properties, '$.shopify_customer_id') AS shopify_customer_id,
+  JSON_VALUE(properties, '$.shopify_customer_notes') AS shopify_customer_notes,
+  JSON_VALUE(properties, '$.state') AS state,
+  JSON_VALUE(properties, '$.tax_exempt') AS tax_exempt,
+  CAST(JSON_VALUE(properties, '$.total_spent') AS NUMERIC) AS total_spent,
+  JSON_VALUE(properties, '$.verified_email') AS verified_email
+FROM `{user_property_dataset}`
 ```
-**Explanation:**
-Calculates the number of users who viewed a product, the number who placed an order, and the number who did both in the specified date range. Dates are parameterized.
 
-### Example 7: Retention Analysis - Users Returning After 7 Days
+### Example 4: 
+# Order Stats of customers who signed up within a date range. Joins the events table with the user table on distinct_id.
+**SQL Query:**
+```sql
+  SELECT
+    u.distinct_id,
+    DATETIME(JSON_VALUE(u.properties, '$."$created"')) AS signup_date,
+    FORMAT_DATE('%Y-%m', DATETIME(JSON_VALUE(u.properties, '$."$created"'))) AS signup_date_month,
+    JSON_VALUE(u.properties, '$."$email"') AS email,
+    COUNTIF(e.event = 'Order Received') AS orders_received,
+    COUNTIF(e.event = 'Order Fulfilled') AS orders_fulfilled,
+    COUNTIF(e.event = 'Order Refunded') AS orders_refunded,
+
+  FROM `{event_dataset}` e
+  JOIN `{user_property_dataset}` u ON e.distinct_id = u.distinct_id
+  WHERE
+    -- Only users who signed up in this date range
+    DATETIME(JSON_VALUE(u.properties, '$."$created"')) BETWEEN @start_date AND @end_date
+  GROUP BY 1,2,3,4
+  ORDER BY 2
+```
+
+### Example 5: 
+# Funnel Analysis - Show number of people that viewed a product and converted
+**SQL Query:**
+```sql
+  WITH page_viewers AS (
+    SELECT DISTINCT distinct_id
+    FROM `{event_dataset}`
+    WHERE event = 'Page Viewed'
+      AND event_time BETWEEN @start_date AND @end_date
+  ),
+  product_viewers AS (
+    SELECT DISTINCT distinct_id
+    FROM `{event_dataset}`
+    WHERE event = 'Product Viewed'
+      AND event_time BETWEEN @start_date AND @end_date
+  ),
+  checkout_starters AS (
+    SELECT DISTINCT distinct_id
+    FROM `{event_dataset}`
+    WHERE event = 'Checkout Started'
+      AND event_time BETWEEN @start_date AND @end_date
+  ),
+  order_receivers AS (
+    SELECT DISTINCT distinct_id
+    FROM `{event_dataset}`
+    WHERE event = 'Order Received'
+      AND event_time BETWEEN @start_date AND @end_date
+  )
+  SELECT
+    -- Stage counts
+    (SELECT COUNT(*) FROM page_viewers) AS page_viewers,
+    (SELECT COUNT(*) FROM product_viewers) AS product_viewers,
+    (SELECT COUNT(*) FROM checkout_starters) AS checkout_starters,
+    (SELECT COUNT(*) FROM order_receivers) AS order_receivers,
+    -- Conversion counts from previous stage
+    (SELECT COUNT(*) FROM product_viewers WHERE distinct_id IN (SELECT distinct_id FROM page_viewers)) AS pv_to_prodview,
+    (SELECT COUNT(*) FROM checkout_starters WHERE distinct_id IN (SELECT distinct_id FROM product_viewers)) AS prodview_to_checkout,
+    (SELECT COUNT(*) FROM order_receivers WHERE distinct_id IN (SELECT distinct_id FROM checkout_starters)) AS checkout_to_order
+```
+
+
+### Example 6:
+# Retention Analysis: Counts users who returned to view a page at least 7 days after their first visit in the specified date range. Dates are parameterized.
+
 **SQL Query:**
 ```sql
 WITH first_seen AS (
@@ -347,43 +434,18 @@ returned AS (
 SELECT COUNT(DISTINCT distinct_id) AS retained_users
 FROM returned
 ```
-**Explanation:**
-Counts users who returned to view a page at least 7 days after their first visit in the specified date range. Dates are parameterized.
 
-### Example 8: Conversion Rate - Add to Cart to Purchase
-**SQL Query:**
-```sql
-WITH add_to_cart AS (
-  SELECT DISTINCT distinct_id
-  FROM `{event_dataset}`
-  WHERE event = 'Product Added To Cart'
-    AND event_time BETWEEN @start_date AND @end_date
-),
-purchased AS (
-  SELECT DISTINCT distinct_id
-  FROM `{event_dataset}`
-  WHERE event = 'Order Received'
-    AND event_time BETWEEN @start_date AND @end_date
-)
-SELECT
-  (SELECT COUNT(*) FROM add_to_cart) AS add_to_cart_count,
-  (SELECT COUNT(*) FROM purchased) AS purchased_count,
-  SAFE_DIVIDE(COUNT(DISTINCT add_to_cart.distinct_id), COUNT(DISTINCT purchased.distinct_id)) AS conversion_rate
-FROM add_to_cart
-LEFT JOIN purchased ON add_to_cart.distinct_id = purchased.distinct_id
-```
-**Explanation:**
-Calculates the conversion rate from 'Product Added To Cart' to 'Order Received' in the specified date range. Dates are parameterized.
 
-### Example 9: Cohort Analysis by First and Last Event Property (e.g., Landing Page, Product Viewed)
+### Example 7: 
+# Cohort Analysis by First and Last Event Property (e.g., Landing Page, Product Viewed). Finds each user's first landing page (the first page they viewed in the specified date range), cohorts users by this page, and joins with user info. Dates are parameterized. This pattern can be adapted for any event/property (e.g., first product viewed).
 
 **SQL Query (First Landing Page):**
 ```sql
-WITH page_viewed_events AS (
+ page_viewed_events AS (
   SELECT
     event_time,
     distinct_id,
-    mp_reserved_current_url,
+    JSON_VALUE(properties, '$."$current_url"') AS current_url,
     ROW_NUMBER() OVER (PARTITION BY distinct_id ORDER BY event_time ASC) AS rn
   FROM `{event_dataset}`
   WHERE event = 'Page Viewed'
@@ -392,7 +454,7 @@ WITH page_viewed_events AS (
 first_landing_page AS (
   SELECT
     distinct_id,
-    REGEXP_EXTRACT(mp_reserved_current_url, r'^https?://[^/]+(/[^?]*)') AS first_landing_page
+    REGEXP_EXTRACT(current_url, r'^https?://[^/]+(/[^?]*)') AS first_landing_page
   FROM page_viewed_events
   WHERE rn = 1
 )
@@ -400,76 +462,17 @@ SELECT
   a.distinct_id, 
   first_landing_page, -- Cohort
   CASE WHEN u.distinct_id IS NOT NULL THEN 'customer' ELSE 'guest' END AS user_type,
-  u.mp_reserved_email,
-  u.mp_reserved_created,
-  u.mp_reserved_initial_utm_source,
-  u.mp_reserved_initial_utm_medium,
-  u.mp_reserved_city,
-  u.mp_reserved_country_code,
-  u.total_spent,
-  u.order_count
+  JSON_VALUE(properties, '$."total_spent"') AS total_spent,
+  JSON_VALUE(properties, '$."order_count"') AS order_count,
 FROM first_landing_page a
 LEFT JOIN `{user_property_dataset}` u ON a.distinct_id = u.distinct_id
 ```
-**Explanation:**
-Finds each user's first landing page (the first page they viewed in the specified date range), cohorts users by this page, and joins with user info. Dates are parameterized. This pattern can be adapted for any event/property (e.g., first product viewed).
 
-**SQL Query (Last Landing Page):**
-```sql
-WITH page_viewed_events AS (
-  SELECT
-    event_time,
-    distinct_id,
-    mp_reserved_current_url,
-    ROW_NUMBER() OVER (PARTITION BY distinct_id ORDER BY event_time DESC) AS rn
-  FROM `{event_dataset}`
-  WHERE event = 'Page Viewed'
-    AND event_time BETWEEN @start_date AND @end_date
-),
-last_landing_page AS (
-  SELECT
-    distinct_id,
-    REGEXP_EXTRACT(mp_reserved_current_url, r'^https?://[^/]+(/[^?]*)') AS last_landing_page
-  FROM page_viewed_events
-  WHERE rn = 1
-)
-SELECT 
-  a.distinct_id, 
-  last_landing_page, -- Cohort
-  CASE WHEN u.distinct_id IS NOT NULL THEN 'customer' ELSE 'guest' END AS user_type,
-  u.mp_reserved_email,
-  u.mp_reserved_created,
-  u.mp_reserved_initial_utm_source,
-  u.mp_reserved_initial_utm_medium,
-  u.mp_reserved_city,
-  u.mp_reserved_country_code,
-  u.total_spent,
-  u.order_count
-FROM last_landing_page a
-LEFT JOIN `{user_property_dataset}` u ON a.distinct_id = u.distinct_id
-```
-**Explanation:**
-Finds each user's last landing page (the last page they viewed in the specified date range), cohorts users by this page, and joins with user info. Dates are parameterized. To analyze by last event property, change the ORDER BY in the ROW_NUMBER window to DESC. This pattern generalizes to any event/property (e.g., last product viewed, last campaign, etc.).
+### Example 8: 
+# Attribution by First and Last Touch Campaign
+# These queries demonstrate attribution for marketing fields (utm_campaign, utm_source, etc.)
+# using the cohort mechanism. The first query assigns each user the utm fields from their first 'Page Viewed' event in the date range (first touch attribution). The second assigns the utm fields from their last 'Page Viewed' event (last touch attribution). Always ask the user which attribution model they want. For user properties, use `mp_reserved_initial_utm_*` for first touch and `utm_*` for last touch. For event properties, use the value from the first or last event as needed.
 
-### Example 10: Querying the Products Object (Extracting Product ID and Title)
-**SQL Query:**
-```sql
-SELECT
-  event_time,
-  distinct_id,
-  JSON_VALUE(product, '$.id') AS product_id,
-  JSON_VALUE(product, '$.title') AS product_title
-FROM
-  `{event_dataset}`,
-  UNNEST(JSON_QUERY_ARRAY(products)) AS product
-WHERE
-  event = 'Product Viewed'
-  AND event_time BETWEEN @start_date AND @end_date
-```
-**Explanation:**
-This query demonstrates how to extract fields from the `products` object for each 'Product Viewed' event. It unnests the `products` array and uses `JSON_VALUE` to extract the `id` and `title` for each product. The date range is parameterized with `@start_date` and `@end_date`.
-
-### Example 11: Attribution by First and Last Touch Campaign (utm_campaign)
 **SQL Query (First Touch Attribution):**
 ```sql
 WITH first_pageview AS (
@@ -480,7 +483,7 @@ WITH first_pageview AS (
     utm_medium,
     utm_content,
     utm_term,
-    ROW_NUMBER() OVER (PARTITION BY distinct_id ORDER BY event_time ASC) AS rn
+    ROW_NUMBER() OVER (PARTITION BY distinct_id ORDER BY time ASC) AS rn
   FROM `{event_dataset}`
   WHERE event = 'Page Viewed'
     AND event_time BETWEEN '2025-04-01' AND '2025-04-30'
@@ -545,7 +548,6 @@ FROM `{user_property_dataset}` u
 LEFT JOIN last_touch l ON u.distinct_id = l.distinct_id
 ```
 **Explanation:**
-These queries demonstrate attribution for marketing fields (utm_campaign, utm_source, etc.) using the cohort mechanism. The first query assigns each user the utm fields from their first 'Page Viewed' event in the date range (first touch attribution). The second assigns the utm fields from their last 'Page Viewed' event (last touch attribution). Always ask the user which attribution model they want. For user properties, use `mp_reserved_initial_utm_*` for first touch and `utm_*` for last touch. For event properties, use the value from the first or last event as needed.
 
 ### Example 12: Chart Generation - Daily Revenue Line Chart
 **User Request:** "Create a line chart showing daily revenue for the last 30 days."
@@ -554,7 +556,7 @@ These queries demonstrate attribution for marketing fields (utm_campaign, utm_so
 ```sql
 SELECT 
   DATE(event_time) AS sale_date,
-  SUM(CAST(cart_total_amount AS FLOAT64)) AS daily_revenue
+  ROUND(SUM(CAST(JSON_VALUE(properties, '$.cart_total_amount') AS NUMERIC)), 2) AS daily_revenue
 FROM `{event_dataset}`
 WHERE event = 'Order Received'
   AND event_time BETWEEN '2025-01-01' AND '2025-01-30'
@@ -563,7 +565,7 @@ ORDER BY sale_date
 ```
 
 **Explanation:**
-Returns daily revenue totals for the last 30 days, then generates a line chart to visualize the revenue trend over event_time. Line chart is appropriate for time series data showing trends.
+Returns daily revenue totals for the last 30 days, then generates a line chart to visualize the revenue trend over time. Line chart is appropriate for time series data showing trends.
 
 ### Example 13: Chart Generation - Orders by City Bar Chart
 **User Request:** "Show me a bar chart of orders by city."
@@ -571,14 +573,14 @@ Returns daily revenue totals for the last 30 days, then generates a line chart t
 **SQL Query:**
 ```sql
 SELECT 
-  u.mp_reserved_city AS city,
+  JSON_VALUE(u.properties, '$."$city"') AS city,
   COUNT(*) AS order_count
 FROM `{event_dataset}` e
 JOIN `{user_property_dataset}` u ON e.distinct_id = u.distinct_id
 WHERE e.event = 'Order Received'
-  AND e.time BETWEEN '2025-01-01' AND '2025-01-30'
-  AND u.mp_reserved_city IS NOT NULL
-GROUP BY u.mp_reserved_city
+  AND e.event_time BETWEEN '2025-01-01' AND '2025-01-30'
+  AND JSON_VALUE(u.properties, '$."$city"') IS NOT NULL
+GROUP BY JSON_VALUE(u.properties, '$."$city"')
 ORDER BY order_count DESC
 LIMIT 10
 ```
@@ -593,15 +595,15 @@ Returns order counts by city for the last 30 days, limited to top 10 cities, the
 ```sql
 SELECT
   JSON_VALUE(product, '$.title') AS product_title,
-  SUM(CAST(JSON_VALUE(product, '$.price') AS FLOAT64)) AS total_revenue,
-  SUM(CAST(JSON_VALUE(product, '$.variant_unit_cost') AS FLOAT64)) AS total_cogs,
-  SUM(CAST(JSON_VALUE(product, '$.price') AS FLOAT64)) - SUM(CAST(JSON_VALUE(product, '$.variant_unit_cost') AS FLOAT64)) AS total_profit
+  ROUND(SUM(CAST(JSON_VALUE(product, '$.price') AS NUMERIC)), 2) AS total_revenue,
+  ROUND(SUM(CAST(JSON_VALUE(product, '$.variant_unit_cost') AS NUMERIC)), 2) AS total_cogs,
+  ROUND(SUM(CAST(JSON_VALUE(product, '$.price') AS NUMERIC)) - SUM(CAST(JSON_VALUE(product, '$.variant_unit_cost') AS NUMERIC)), 2) AS total_profit
 FROM
   `{event_dataset}`,
-  UNNEST(JSON_QUERY_ARRAY(products)) AS product
+  UNNEST(JSON_EXTRACT_ARRAY(properties.products)) AS product
 WHERE
   event = 'Order Received'
-  AND DATE(time) BETWEEN DATE_SUB(DATE('2025-05-28'), INTERVAL 12 MONTH) AND DATE('2025-05-28')
+  AND DATE(event_time) BETWEEN DATE_SUB(DATE('2025-05-28'), INTERVAL 12 MONTH) AND DATE('2025-05-28')
 GROUP BY
   product_title
 ORDER BY

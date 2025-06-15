@@ -18,7 +18,9 @@ from .tools import (
     get_event_by_name,
     get_events_by_property,
     search_events_by_description,
-    debug_connection_info
+    query_mixpanel_user_schema,
+    get_user_property_by_name,
+    search_user_properties_by_description
 )
 
 # Variables 
@@ -45,6 +47,8 @@ data_retrieval = Agent(
         get_event_by_name,
         get_events_by_property,
         search_events_by_description,
-        debug_connection_info
+        query_mixpanel_user_schema,
+        get_user_property_by_name,
+        search_user_properties_by_description
     ]
 )

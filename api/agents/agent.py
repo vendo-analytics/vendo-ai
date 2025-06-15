@@ -34,7 +34,6 @@ from .state_manager import get_current_connection_id, get_current_session_id,  g
 from .business_data.business_info import get_business_context
 from .business_data.annotation import get_annotations  ## don't work on debugger
 
-
 ## Define Variables 
 current_date = date.today()
 debug = get_debug_mode()  # True = on, False = off
@@ -44,22 +43,22 @@ business_context = get_business_context(connection_id)
 business_documents =firestore_session_service.get_all_general_context(get_current_connection_id())
 chat_history = firestore_session_service.get_chat_messages(connection_id=get_current_connection_id(),session_id=get_current_session_id)
 
-
 def setup_before_agent_call(callback_context: CallbackContext):
     """Setup the agent with client information."""
 
-    ## Add to Session State
-    callback_context.state["annotations"] = get_annotations()
+## Add to Session State
+    callback_context.state["annotations"] = get_annotations() #getting from .business.data not app
     callback_context.state["business_context"] = business_context
     callback_context.state["business_documents"] = business_documents
     callback_context.state["chat_history"] = chat_history 
     callback_context.state["current_date"] = current_date
     callback_context.state["debug_mode"] = debug
-    callback_context.state["event_dataset"] = f"gam-dwh.{business_context['dataset_id']}.mixpanel_all_data_export"
-    callback_context.state["user_property_dataset"] = f"gam-dwh.{business_context['dataset_id']}.mixpanel_user_data"
+    #callback_context.state["event_dataset"] = f"gam-dwh.{business_context['dataset_id']}.mixpanel_all_data_export"
+    #callback_context.state["user_property_dataset"] = f"gam-dwh.{business_context['dataset_id']}.mixpanel_user_data"
+    callback_context.state["event_dataset"] = "gam-dwh.mixpanel_data_3266709.mixpanel_all_data_export_y_test"
+    callback_context.state["user_property_dataset"] = "gam-dwh.mixpanel_data_3266709.mixpanel_user_data"
 
-
-# Google Search agent
+## Google Search agent
 google_search_agent = Agent(
     model=os.getenv("MODEL_GEMINI"),
     name='google_search',
@@ -67,7 +66,6 @@ google_search_agent = Agent(
     instruction=google_search_agent_prompt(debug),
     tools=[google_search]
 )
-
 
 # ────────────────────────────────────────────────────────────────────────────
 # Root orchestration agent
@@ -86,7 +84,6 @@ root_agent = Agent(
     tools=[
         AgentTool(agent=google_search_agent),
         notify_vendo,
-        #load_artifacts, 
     ],
     before_agent_callback=setup_before_agent_call, #Add client context, schemas
     generate_content_config=types.GenerateContentConfig(temperature=0.01),

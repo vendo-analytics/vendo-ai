@@ -593,10 +593,6 @@ class FirestoreSessionService(BaseSessionService):
             return []
 
 
-
-
-
-
 def embed_text(content: str) -> List[float]:
     client = genai.Client()
 
@@ -612,4 +608,3 @@ def embed_text(content: str) -> List[float]:
 
 #session_service = FirestoreSessionService()
 #session_service.append_message("001", "user", "My name is Suraj", message_type="requirements", include_embedding=True)
-

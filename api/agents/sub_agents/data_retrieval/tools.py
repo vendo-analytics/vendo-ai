@@ -121,17 +121,17 @@ def build_chart(
 ) -> str:
     """
     Generates JSX code for a Recharts chart using provided x/y values.
-    Returns a JSX string to render a chart in a Next.js frontend, embedding the caption and title above the chart.
+    Returns a JSX string to render a chart in a Next.js frontend, embedding the title above the chart and the caption below the chart.
 
     Args:
         x: List of strings (e.g. dates, categories, or numeric values as strings)
         y: List of numbers (e.g. sales, revenue, etc.)
         title: Optional title for the chart
         chart_type: Type of chart - "line", "bar", or "scatter" (default: "line")
-        caption: Optional descriptive caption to display above the chart
+        caption: Optional descriptive caption to display below the chart
 
     Returns:
-        A string of JSX code for rendering the appropriate chart type with XAxis, YAxis, Tooltip, and chart-specific components from Recharts, with caption and title above the chart.
+        A string of JSX code for rendering the appropriate chart type with XAxis, YAxis, Tooltip, and chart-specific components from Recharts, with title above and caption below the chart.
     """
     print("BUILDING CHART", x, y, title, chart_type, caption, flush=True)
     valid_types = ["line", "bar", "scatter"]
@@ -145,33 +145,36 @@ def build_chart(
     else:
         data_points = [{"x": str(x_val), "y": float(y_val)} for x_val, y_val in zip(x, y)]
     data_json = json.dumps(data_points).replace('"', "'")
-    caption_component = f"<div style={{textAlign: 'center', color: '#666', marginBottom: '12px'}}>{caption}</div>" if caption else "<div style={{textAlign: 'center', color: '#666', marginBottom: '12px'}}>'No caption provided'</div>"
+    caption_component = f"<div style={{textAlign: 'center', color: '#666', marginTop: '12px'}}>{caption}</div>" if caption else "<div style={{textAlign: 'center', color: '#666', marginTop: '12px'}}>'No caption provided'</div>"
     title_component = f"<h2>{title}</h2>" if title else ""
     if chart_type == "line":
-        jsx = f"""{caption_component}{title_component}
+        jsx = f"""{title_component}
 <LineChart width={{500}} height={{300}} data={data_json}>
   <XAxis dataKey=\"x\" />
   <YAxis />
   <Tooltip />
   <Line type=\"monotone\" dataKey=\"y\" stroke=\"#8884d8\" />
-</LineChart>"""
+</LineChart>
+{caption_component}"""
     elif chart_type == "bar":
-        jsx = f"""{caption_component}{title_component}
+        jsx = f"""{title_component}
 <BarChart width={{500}} height={{300}} data={data_json}>
   <XAxis dataKey=\"x\" />
   <YAxis />
   <Tooltip />
   <Bar dataKey=\"y\" fill=\"#8884d8\" />
-</BarChart>"""
+</BarChart>
+{caption_component}"""
     elif chart_type == "scatter":
         x_axis_type = "number" if chart_type == "scatter" and all(str(val).replace('.', '').replace('-', '').isdigit() for val in x[:3]) else "category"
-        jsx = f"""{caption_component}{title_component}
+        jsx = f"""{title_component}
 <ScatterChart width={{500}} height={{300}} data={data_json}>
   <XAxis dataKey=\"x\" type=\"{x_axis_type}\" />
   <YAxis dataKey=\"y\" type=\"number\" />
   <Tooltip />
   <Scatter data={data_json} fill=\"#8884d8\" />
-</ScatterChart>"""
+</ScatterChart>
+{caption_component}"""
     return jsx
 
 def query_mixpanel_event_schema(connection_id: Optional[str] = None):

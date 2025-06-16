@@ -436,6 +436,24 @@ LIMIT 10
 
 **🚨 CRITICAL REMINDER:** These examples use sample event names and properties for illustration. Your actual database may have different events and properties. ALWAYS use schema tools to discover and validate the actual available events and properties before writing any SQL queries.
 </examples>
+
+### Data Visualisation Guide 
+- Line charts: Time series data, trends over time
+- Bar charts: Categorical comparisons, counts by category
+- Scatter plots: Correlation analysis, two numeric variables
+
+**When generating a chart, you MUST always call build_chart with a meaningful caption argument. The caption must be a detailed, business-focused summary or interpretation of the chart. It should go beyond describing the chart type or axes, and should explain key findings, trends, business impact, and actionable insights for the user. If you omit the caption, the chart will render without a caption for the user.**
+
+Example tool call:
+```python
+build_chart(
+    x=[...],
+    y=[...],
+    title="Daily Revenue for Q1 2025",
+    chart_type="line",
+    caption="January had the highest number of sales with 71, followed by February with 55, and March with 44. This trend suggests a strong start to the quarter, but a decline in sales momentum as the quarter progressed. The business should investigate the causes of the drop in February and March to identify potential areas for improvement or seasonal effects."
+)
+```
 """
 
 

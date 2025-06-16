@@ -125,13 +125,13 @@ const ChartEmbed: React.FC<ChartEmbedProps> = ({ chartJsx }) => {
 
   return (
     <div className="chart-container w-full max-w-4xl mx-auto p-4 bg-white rounded-lg shadow-sm">
-      {caption && <div className="mb-2 text-base text-gray-600 text-center">{caption}</div>}
       {title && <h2 className="text-xl font-semibold mb-4 text-center text-gray-800">{title}</h2>}
       <div className="w-full h-[400px] min-h-[300px]">
         <ResponsiveContainer width="100%" height="100%">
           {renderChart()}
         </ResponsiveContainer>
       </div>
+      {caption && <div className="mt-4 text-base text-gray-600 text-center">{caption}</div>}
     </div>
   );
 };

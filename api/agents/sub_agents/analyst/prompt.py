@@ -222,17 +222,45 @@ Based on data characteristics, automatically select:
 3. **Chart Generation**: Use `build_chart` tool with proper parameters
 4. **Title Creation**: Generate meaningful titles based on analysis context
 
-Example data processing:
+### Chart Title Generation Rules
+When generating chart titles, follow these guidelines:
+
+1. **Title Structure**:
+   - Start with a clear, descriptive title
+   - Include time period if applicable
+   - Add relevant metrics or dimensions
+   - Keep it concise but informative
+
+2. **Title Format**:
+   ```jsx
+   <h2 style={{textAlign: 'center', marginBottom: '20px'}}>Your Title Here</h2>
+   ```
+
+3. **Title Examples**:
+   - Time Series: "Daily Page Views (May 16 - June 10, 2025)"
+   - Comparison: "Revenue by Campaign - Last 30 Days"
+   - Trend: "User Growth Trend - Q2 2025"
+   - Distribution: "Page Views Distribution by Region"
+
+4. **Title Components**:
+   - Metric: What is being measured (e.g., "Page Views", "Revenue")
+   - Dimension: How it's being analyzed (e.g., "by Campaign", "by Region")
+   - Time Period: When the data is from (e.g., "Last 30 Days", "Q2 2025")
+   - Context: Any relevant business context
+
+Example data processing with title:
 ```python
 # For time series (LINE CHART)
 x = [row["date"] for row in raw_data]
 y = [float(row["revenue"]) for row in raw_data]
-build_chart(x=x, y=y, title="Revenue Trend Over Time", chart_type="line")
+title = f"<h2 style={{textAlign: 'center', marginBottom: '20px'}}>Daily Revenue Trend - {start_date} to {end_date}</h2>"
+build_chart(x=x, y=y, title=title, chart_type="line")
 
 # For categorical comparison (BAR CHART)
 x = [row["campaign"] for row in raw_data]
 y = [float(row["conversions"]) for row in raw_data]
-build_chart(x=x, y=y, title="Conversions by Campaign", chart_type="bar")
+title = f"<h2 style={{textAlign: 'center', marginBottom: '20px'}}>Campaign Performance - {period}</h2>"
+build_chart(x=x, y=y, title=title, chart_type="bar")
 ```
 
 ## Communication Style

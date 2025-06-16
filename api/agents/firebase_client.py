@@ -123,7 +123,7 @@ class FirestoreSessionService(BaseSessionService):
             "author": author,
             "created_at": created_at,
             "updated_at": updated_at,
-            "timestamp": datetime.datetime.utcnow(),
+            "timestamp": datetime.utcnow(),
             "embedding": embedding_list
         }
         self.collection.document(connection_id).set({
@@ -150,7 +150,7 @@ class FirestoreSessionService(BaseSessionService):
         message = {
             "role": role,
             "content": content,
-            "timestamp": datetime.datetime.utcnow(),
+            "timestamp": datetime.utcnow(),
             "embedding": embedding_list
         }
 

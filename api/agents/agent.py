@@ -43,10 +43,12 @@ business_context = get_business_context(connection_id)
 business_documents =firestore_session_service.get_all_general_context(get_current_connection_id())
 chat_history = firestore_session_service.get_chat_messages(connection_id=get_current_connection_id(),session_id=get_current_session_id)
 
+
+# ────────────────────────────────────────────────────────────────────────────
+# Bring business context to the agent
+# ────────────────────────────────────────────────────────────────────────────
 def setup_before_agent_call(callback_context: CallbackContext):
     """Setup the agent with client information."""
-
-## Add to Session State
     callback_context.state["annotations"] = get_annotations() #getting from .business.data not app
     callback_context.state["business_context"] = business_context
     callback_context.state["business_documents"] = business_documents
@@ -58,11 +60,13 @@ def setup_before_agent_call(callback_context: CallbackContext):
     callback_context.state["event_dataset"] = "gam-dwh.mixpanel_data_3266709.mixpanel_all_data_export_y_test"
     callback_context.state["user_property_dataset"] = "gam-dwh.mixpanel_data_3266709.mixpanel_user_data"
 
-## Google Search agent
+# ────────────────────────────────────────────────────────────────────────────
+# Google Search agent
+# ────────────────────────────────────────────────────────────────────────────
 google_search_agent = Agent(
     model=os.getenv("MODEL_GEMINI"),
     name='google_search',
-    description="Google search agent",
+    description="You are the `google_search` agent, a specialist in retrieving and synthesizing up-to-date, factual, and external information using Google Search. Your primary responsibility is to supplement internal analytics with authoritative, relevant, and timely information from the web.",
     instruction=google_search_agent_prompt(debug),
     tools=[google_search]
 )
@@ -73,7 +77,7 @@ google_search_agent = Agent(
 root_agent = Agent(
     name="root_agent",
     model=os.getenv("MODEL_GEMINI"),
-    description="Job is to route the user's request to the right sub-agent.",
+    description="You are the root agent in a multi-agent analytics assistant system designed to be fast, efficient, and user-friendly. You coordinate a team of specialized agents and tools, each designed for specific analytics or data-related tasks.",
     instruction=root_agent_prompt(debug),
     global_instruction=global_instructions_prompt(),
     sub_agents=[
@@ -88,4 +92,3 @@ root_agent = Agent(
     before_agent_callback=setup_before_agent_call, #Add client context, schemas
     generate_content_config=types.GenerateContentConfig(temperature=0.01),
 )
-

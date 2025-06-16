@@ -15,10 +15,35 @@ const ChartEmbed = dynamic(() => import("./ChartEmbed"), { ssr: false })
 
 // Helper function to detect if content contains a chart
 const isChartContent = (content: string): boolean => {
-  return (
+  // Check for JSX chart format
+  const isJsxChart = (
     (content.includes("<LineChart") || content.includes("<BarChart") || content.includes("<ScatterChart")) &&
     content.includes("data=")
-  )
+  );
+
+  // Check for JSON chart format
+  const isJsonChart = (() => {
+    try {
+      console.log("content", content)
+      // Try to parse as JSON
+      const jsonData = JSON.parse(content);
+      console.log("jsonData", jsonData)
+      // Check if it has the required chart properties
+      return (
+        jsonData &&
+        typeof jsonData === 'object' &&
+        'type' in jsonData &&
+        ['line', 'bar', 'scatter'].includes(jsonData.type) &&
+        Array.isArray(jsonData.x) &&
+        Array.isArray(jsonData.y) &&
+        jsonData.x.length === jsonData.y.length
+      );
+    } catch (e) {
+      return false;
+    }
+  })();
+
+  return isJsxChart || isJsonChart;
 }
 
 type Message = AIMessage & { traceId?: string }
@@ -54,6 +79,28 @@ export const PreviewMessage = ({ message, onRating, currentRating }: PreviewMess
     }
   }
 
+  // Helper to extract chart if content is JSON
+  let chartJsx = undefined;
+  let isChart = false;
+  if (message.content) {
+    try {
+      const parsed = JSON.parse(message.content);
+      if (
+        typeof parsed === 'object' &&
+        parsed !== null &&
+        'chart' in parsed &&
+        typeof parsed.chart === 'string'
+      ) {
+        chartJsx = parsed.chart;
+        isChart = true;
+      }
+    } catch (e) {
+      // Not JSON, fallback to old detection
+      isChart = isChartContent(message.content);
+      chartJsx = message.content;
+    }
+  }
+
   return (
     <motion.div
       className="w-full mx-auto px-4 group/message"
@@ -75,8 +122,8 @@ export const PreviewMessage = ({ message, onRating, currentRating }: PreviewMess
         <div className="flex flex-col gap-2 w-full">
           {message.content && (
             <div className="flex flex-col gap-4">
-              {isChartContent(message.content) ? (
-                <ChartEmbed chartJsx={message.content} />
+              {isChart ? (
+                <ChartEmbed chartJsx={chartJsx!} />
               ) : (
                 <Markdown>{message.content as string}</Markdown>
               )}

@@ -31,73 +31,66 @@ interface ChartEmbedProps {
   chartJsx: string;
 }
 
+interface JsonChartData {
+  type: 'line' | 'bar' | 'scatter';
+  title?: string;
+  x: string[];
+  y: number[];
+  yAxisLabel?: string;
+}
+
+// Extract caption from first <div>...</div>
+const extractCaption = (jsx: string): string | undefined => {
+  const match = jsx.match(/<div[^>]*>(.*?)<\/div>/s);
+  return match ? match[1].trim() : undefined;
+};
+
+// Extract title from first <h2>...</h2>
+const extractTitle = (jsx: string): string | undefined => {
+  const match = jsx.match(/<h2[^>]*>(.*?)<\/h2>/s);
+  return match ? match[1].trim() : undefined;
+};
+
+// Extract chart block and type
+const extractChartBlock = (jsx: string): { type: string, chart: string } | undefined => {
+  const chartTypes = ['BarChart', 'LineChart', 'ScatterChart'];
+  for (const type of chartTypes) {
+    const regex = new RegExp(`<${type}[^>]*>.*?<\/${type}>`, 's');
+    const match = jsx.match(regex);
+    if (match) return { type, chart: match[0] };
+  }
+  return undefined;
+};
+
+// Extract data array from chart block
+const extractDataArray = (chartBlock: string): any[] => {
+  // Match data prop: data=[{...}] or data={<array>}
+  const match = chartBlock.match(/data=\{?(\[.*?\])\}?/s);
+  if (!match) return [];
+  try {
+    // Replace single quotes with double quotes for JSON parsing
+    const jsonStr = match[1].replace(/'/g, '"');
+    return JSON.parse(jsonStr);
+  } catch {
+    return [];
+  }
+};
+
 const ChartEmbed: React.FC<ChartEmbedProps> = ({ chartJsx }) => {
-  // Function to safely parse and extract chart data
-  const extractChartData = (jsx: string) => {
-    try {
-      // Extract data prop content - handle both {[...]} and [...] formats
-      let dataMatch = jsx.match(/data=\{(\[.*?\])\}/s);
-      if (!dataMatch) {
-        // Try direct array format
-        dataMatch = jsx.match(/data=(\[.*?\])/s);
-      }
-      
-      if (!dataMatch) {
-        console.log('No data match found');
-        return [];
-      }
-      
-      // Parse the data string into actual array
-      const dataStr = dataMatch[1].replace(/'/g, '"');
-      const parsedData = JSON.parse(dataStr);
-      return parsedData;
-    } catch (error) {
-      console.error('Error parsing chart data:', error);
-      return [];
-    }
-  };
-
-  // Function to detect chart type from JSX
-  const detectChartType = (jsx: string): 'line' | 'bar' | 'scatter' => {
-    if (jsx.includes('<BarChart')) return 'bar';
-    if (jsx.includes('<ScatterChart')) return 'scatter';
-    return 'line'; // default
-  };
-
-  // Extract title if present - handle both h2 and style-based titles
-  const extractTitle = (jsx: string): string => {
-    // Try to extract from h2 tag first
-    const h2Match = jsx.match(/<h2[^>]*>(.*?)<\/h2>/);
-    if (h2Match) return h2Match[1];
-
-    // Try to extract from style-based title
-    const styleMatch = jsx.match(/<h2 style=\{.*?\}>(.*?)<\/h2>/);
-    if (styleMatch) return styleMatch[1];
-
-    // Default title based on chart type
-    const chartType = detectChartType(jsx);
-    switch (chartType) {
-      case 'bar':
-        return 'Bar Chart Visualization';
-      case 'scatter':
-        return 'Scatter Plot Visualization';
-      case 'line':
-      default:
-        return 'Line Chart Visualization';
-    }
-  };
-
-  // Extract chart data and type
-  const data = extractChartData(chartJsx);
-  const chartType = detectChartType(chartJsx);
+  const caption = extractCaption(chartJsx);
   const title = extractTitle(chartJsx);
+  const chartBlock = extractChartBlock(chartJsx);
 
-  // Render appropriate chart based on type
+  if (!chartBlock) return <div>Invalid chart data</div>;
+
+  const data = extractDataArray(chartBlock.chart);
+
+  // Render chart based on type
   const renderChart = () => {
-    switch (chartType) {
-      case 'bar':
+    switch (chartBlock.type) {
+      case 'BarChart':
         return (
-          <BarChart data={data}>
+          <BarChart data={data} width={500} height={300}>
             <XAxis dataKey="x" />
             <YAxis />
             <Tooltip />
@@ -105,63 +98,35 @@ const ChartEmbed: React.FC<ChartEmbedProps> = ({ chartJsx }) => {
             <Bar dataKey="y" fill="#2563eb" />
           </BarChart>
         );
-      
-      case 'scatter':
+      case 'LineChart':
         return (
-          <ScatterChart data={data}>
-            <XAxis dataKey="x" type="number" />
-            <YAxis dataKey="y" type="number" />
+          <LineChart data={data} width={500} height={300}>
+            <XAxis dataKey="x" />
+            <YAxis />
+            <Tooltip />
+            <Legend />
+            <Line type="monotone" dataKey="y" stroke="#2563eb" />
+          </LineChart>
+        );
+      case 'ScatterChart':
+        return (
+          <ScatterChart data={data} width={500} height={300}>
+            <XAxis dataKey="x" />
+            <YAxis dataKey="y" />
             <Tooltip />
             <Legend />
             <Scatter data={data} fill="#2563eb" />
           </ScatterChart>
         );
-      
-      case 'line':
       default:
-        return (
-          <LineChart data={data}>
-            <XAxis 
-              dataKey="x" 
-              tick={{ fontSize: 12 }}
-              tickFormatter={(value) => {
-                const date = new Date(value);
-                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-              }}
-            />
-            <YAxis 
-              tick={{ fontSize: 12 }}
-              label={{ value: 'y', angle: -90, position: 'insideLeft', fontSize: 12 }}
-            />
-            <Tooltip 
-              formatter={(value: number) => [`${value} views`, 'Page Views']}
-              labelFormatter={(label) => {
-                const date = new Date(label);
-                return date.toLocaleDateString('en-US', { 
-                  weekday: 'long',
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric'
-                });
-              }}
-            />
-            <Legend />
-            <Line 
-              type="monotone" 
-              dataKey="y" 
-              stroke="#2563eb" 
-              strokeWidth={2}
-              dot={{ fill: '#2563eb', strokeWidth: 2, r: 4 }}
-              activeDot={{ r: 6 }}
-            />
-          </LineChart>
-        );
+        return <div>Unsupported chart type</div>;
     }
   };
 
   return (
-    <div className="chart-container w-full max-w-4xl mx-auto">
-      <h2 className="text-xl font-semibold mb-4 text-center">{title}</h2>
+    <div className="chart-container w-full max-w-4xl mx-auto p-4 bg-white rounded-lg shadow-sm">
+      {caption && <div className="mb-2 text-base text-gray-600 text-center">{caption}</div>}
+      {title && <h2 className="text-xl font-semibold mb-4 text-center text-gray-800">{title}</h2>}
       <div className="w-full h-[400px] min-h-[300px]">
         <ResponsiveContainer width="100%" height="100%">
           {renderChart()}

@@ -119,7 +119,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_i
     print(f"[CONNECTED] #{session_id} User: {connection_id}")
 
     # Create session with the provided session ID
-    session = session_service.create_session(
+    session = await session_service.create_session(
         app_name=APP_NAME, 
         user_id=connection_id, 
         session_id=session_id  # Use the session_id from frontend
@@ -165,7 +165,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_i
                 # Generate summary for first message
                 if is_first_message:
                     # Create a separate session for summary generation
-                    summary_session = session_service.create_session(
+                    summary_session = await session_service.create_session(
                         app_name=APP_NAME,
                         user_id=connection_id,
                         session_id=f"{session_id}_summary"

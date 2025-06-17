@@ -228,18 +228,12 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_i
                     run_config=run_config
                 )
                 
-                span.set_attribute("input", content)
-                span.set_attribute("user_id", connection_id)
-                span.set_attribute("organization_id", organization_id)
-                span.set_attribute("message_type", "user")
-                input_token_count = len(content) // 4
-                span.set_attribute("gen_ai.usage.prompt_tokens", input_token_count)
-                span.set_attribute("gen_ai.response.model", "gemini-2.0-flash")
+                
 
                 result_text = ""
                 
                 async for event in result:
-                    print(f"[EVENT] {event.content}")
+                    
                     # Handle audio events as before
                     is_audio = event.content and event.content.parts and event.content.parts[0].inline_data and event.content.parts[0].inline_data.mime_type.startswith("audio/pcm")
                     
@@ -255,8 +249,15 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_i
                             continue
                         
                     if event.is_final_response():
+                        
                         if event.content and event.content.parts:
                             result_text = event.content.parts[0].text
+                            if event.usage_metadata:
+                                input_token_count = event.usage_metadata.prompt_token_count
+                                output_token_count = event.usage_metadata.candidates_token_count
+                            else:
+                                input_token_count = len(content) // 4
+                                output_token_count = len(result_text) // 4
                             
                             # Store assistant response in Firebase chat history
                             firestore_session_service.store_chat_message(
@@ -265,14 +266,18 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_i
                                 role="assistant",
                                 content=result_text
                             )
-                            
+                            span.set_attribute("input", content)
+                            span.set_attribute("user_id", connection_id)
+                            span.set_attribute("organization_id", organization_id)
+                            span.set_attribute("message_type", "user")
+                            span.set_attribute("gen_ai.usage.prompt_tokens", input_token_count)
+                            span.set_attribute("gen_ai.response.model", "gemini-2.0-flash")
                             span.set_attribute("output", result_text)
                             span.set_attribute("user_id", connection_id)
                             span.set_attribute("organization_id", organization_id)
                             span.set_attribute("message_type", "assistant")
-                            output_token_count = len(result_text) // 4
                             span.set_attribute("gen_ai.usage.completion_tokens", output_token_count)
-                            span.set_attribute("gen_ai.usage.total_tokens", output_token_count)
+                            span.set_attribute("gen_ai.usage.total_tokens", input_token_count + output_token_count)
                             span.set_attribute("gen_ai.response.model", "gemini-2.0-flash")
                             print(f"[DEBUG] {result_text}", flush=True)
 

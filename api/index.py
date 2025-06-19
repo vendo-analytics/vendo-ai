@@ -955,9 +955,10 @@ async def search_mixpanel_events_by_description(search_term: str = Query(...), c
         from .agents.sub_agents.data_retrieval.tools import search_events_by_description
         result = search_events_by_description(search_term, connection_id)
         return result
-        
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) 
+
 
 class SlackTextRequest(BaseModel):
     prompt: str

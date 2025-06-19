@@ -33,6 +33,7 @@ from langfuse import Langfuse
 import secrets
 from fastapi import HTTPException
 from typing import Optional
+from pydantic import BaseModel
 
 # Logging
 logging.basicConfig(level=logging.DEBUG)
@@ -956,4 +957,45 @@ async def search_mixpanel_events_by_description(search_term: str = Query(...), c
         return result
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) 
+        raise HTTPException(status_code=500, detail=str(e))
+
+class SlackTextRequest(BaseModel):
+    prompt: str
+    connection_id: str = "slack_user"
+    session_id: str = None
+
+@app.post("/api/slack-text")
+async def slack_text_endpoint(request: SlackTextRequest):
+    """
+    Accepts a prompt from Slack, runs the root_agent, and returns a plain text response.
+    """
+    # Use a unique session_id if not provided
+    session_id = request.session_id or f"slack_{int(datetime.now().timestamp())}"
+    connection_id = request.connection_id or "slack_user"
+    # Create session
+    session = await session_service.create_session(
+        app_name=APP_NAME,
+        user_id=connection_id,
+        session_id=session_id
+    )
+    set_current_connection_id(connection_id)
+    set_current_session_id(session_id)
+    runner = Runner(app_name=APP_NAME, agent=root_agent, session_service=session_service)
+    run_config = RunConfig(response_modalities=["text"])
+    content_obj = Content(role="user", parts=[Part.from_text(text=request.prompt)])
+    result_text = ""
+    try:
+        result = runner.run_async(
+            session_id=session_id,
+            user_id=connection_id,
+            new_message=content_obj,
+            run_config=run_config
+        )
+        async for event in result:
+            if event.is_final_response():
+                if event.content and event.content.parts:
+                    result_text = event.content.parts[0].text
+                    break
+    except Exception as e:
+        result_text = f"Error: {str(e)}"
+    return {"text": result_text} 

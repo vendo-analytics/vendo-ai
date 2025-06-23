@@ -35,7 +35,7 @@ import { useADKWebSocket } from "@/hooks/useADKWebSocket"
 import type { Message } from "ai"
 
 // Firebase API functions - integrated with your backend
-const fetchFirebaseContent = async (connectionId = "001") => {
+const fetchFirebaseContent = async (connectionId = "gb1uauyn0Khjcs4Fgxh8") => {
   try {
     const response = await fetch(`/api/general-context?connection_id=${connectionId}`)
     if (!response.ok) throw new Error("Failed to fetch")

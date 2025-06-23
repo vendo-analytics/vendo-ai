@@ -3,6 +3,5 @@
     "api/**": {
       "excludeFiles": "**"
     }
-  },
-  "ignoreCommand": "echo 'Skipping FastAPI in Vercel build'"
+  }
 }

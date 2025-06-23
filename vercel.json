@@ -1,7 +1,8 @@
 {
   "functions": {
     "api/**": {
-      "excludeFiles": "{.next,.git,node_modules}/**"
+      "excludeFiles": "**"
     }
-  }
+  },
+  "ignoreCommand": "echo 'Skipping FastAPI in Vercel build'"
 }

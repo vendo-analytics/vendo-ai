@@ -6,9 +6,10 @@ import io
 from typing import Union, List, Optional, Iterable
 from datetime import date
 from zoneinfo import ZoneInfo
-import google.genai.types as types
 from google.adk.agents import Agent
 from google.adk.agents.callback_context import CallbackContext # Or ToolContext
+from google.genai import types
+
 
 #Prompts
 from .prompt import root_agent_prompt, google_search_agent_prompt
@@ -33,6 +34,8 @@ from .state_manager import get_current_connection_id, get_current_session_id,  g
 ## Below are reading from the Business Data Folder. There is some overlap between what .state_manager and .business_data.business_info.py does
 from .business_data.business_info import get_business_context
 from .business_data.annotation import get_annotations  ## don't work on debugger
+from .business_data.schemas_v2 import get_user_properties, get_events  ## don't work on debugger
+
 
 ## Define Variables 
 current_date = date.today()
@@ -42,7 +45,8 @@ session_id = get_current_session_id()
 business_context = get_business_context(connection_id)
 business_documents =firestore_session_service.get_all_general_context(get_current_connection_id())
 chat_history = firestore_session_service.get_chat_messages(connection_id=get_current_connection_id(),session_id=get_current_session_id)
-
+user_property_schema = get_user_properties()
+event_schema = get_events()
 
 # ────────────────────────────────────────────────────────────────────────────
 # Bring business context to the agent
@@ -57,8 +61,9 @@ def setup_before_agent_call(callback_context: CallbackContext):
     callback_context.state["debug_mode"] = debug
     callback_context.state["event_dataset"] = f"gam-dwh.{business_context['dataset_id']}.mixpanel_all_data_export"
     callback_context.state["user_property_dataset"] = f"gam-dwh.{business_context['dataset_id']}.mixpanel_user_data"
-    #callback_context.state["event_dataset"] = "gam-dwh.mixpanel_data_3080168.mixpanel_all_data_export"
-    #callback_context.state["user_property_dataset"] = "gam-dwh.mixpanel_data_3080168.mixpanel_user_data"
+    callback_context.state["user_property_schema"] = user_property_schema
+    callback_context.state["event_schema"] = event_schema
+
 
 # ────────────────────────────────────────────────────────────────────────────
 # Google Search agent
@@ -83,12 +88,17 @@ root_agent = Agent(
     sub_agents=[
         data_retrieval,
         data_planner,
-        analyst_agent
+        #analyst_agent
     ],
     tools=[
         AgentTool(agent=google_search_agent),
         notify_vendo,
     ],
     before_agent_callback=setup_before_agent_call, #Add client context, schemas
-    generate_content_config=types.GenerateContentConfig(temperature=0.01),
+    generate_content_config=types.GenerateContentConfig(
+        temperature=0,
+        candidate_count=3,
+        top_p=0.95,
+        top_k=20,
+    )
 )

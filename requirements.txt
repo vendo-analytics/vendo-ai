@@ -5,10 +5,11 @@ python-dotenv==1.0.1
 pydantic==2.8.2
 
 # AI and ML dependencies
+google-adk>=0.4.0
 langchain
 langgraph
 langfuse==2.60.8
-openai==1.37.1
+openai>=1.68.2
 pandas==2.1.4
 scikit-learn==1.6.1
 

@@ -22,7 +22,7 @@ export function ConnectionProvider({ children }: { children: React.ReactNode }) 
   const [companies, setCompanies] = useState<Company[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedConnectionId, setSelectedConnectionId] = useState<string>("001")
+  const [selectedConnectionId, setSelectedConnectionId] = useState<string>("gb1uauyn0Khjcs4Fgxh8")
 
   // Fetch companies from API
   useEffect(() => {
@@ -37,7 +37,7 @@ export function ConnectionProvider({ children }: { children: React.ReactNode }) 
         if (!ignore) {
           setCompanies(data)
           // Set default selectedConnectionId
-          let initialId = "001"
+          let initialId = "gb1uauyn0Khjcs4Fgxh8"
           if (typeof window !== "undefined") {
             const saved = localStorage.getItem("selectedConnectionId")
             if (saved && data.find(c => c.id === saved)) {

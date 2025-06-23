@@ -611,7 +611,7 @@ async def delete_annotation(annotation_id: str, connection_id: str = Query(...))
 @app.post("/api/annotations")
 async def create_annotation(data: dict = Body(...)):
     # Get connection_id from the request body instead of query parameter for POST
-    connection_id = data.get("connection_id", "001")  # Fallback to "001" if not provided
+    connection_id = data.get("connection_id", "gb1uauyn0Khjcs4Fgxh8")  # Fallback to "001" if not provided
     client = MixpanelClient(connection_id)
     description = data.get("description")
     date = data.get("date")
@@ -766,7 +766,7 @@ async def set_debug_mode_endpoint(request: dict):
 
 
 @app.get("/api/mixpanel-event-schema")
-async def get_mixpanel_event_schema(connection_id: str = "001"):
+async def get_mixpanel_event_schema(connection_id: str = "gb1uauyn0Khjcs4Fgxh8"):
     """
     Get merged Mixpanel Event Schema (raw + user edits) from Firebase for a specific connection.
     Events and their properties are sorted alphabetically.
@@ -1006,7 +1006,10 @@ async def get_companies():
     try:
         companies = firestore_session_service.list_companies()
         print(f"[DEBUG] Companies: {companies}", flush=True)
-        return companies
+        # Filter companies for only "Piri Red"
+        filtered_companies = [company for company in companies if company.get('name') == 'Piri']
+        print(f"[DEBUG] Filtered Companies: {filtered_companies}", flush=True)
+        return filtered_companies
     except Exception as e:
         logger.error(f"[GET /api/companies] {e}")
         raise HTTPException(status_code=500, detail=str(e))

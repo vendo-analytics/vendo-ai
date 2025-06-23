@@ -55,10 +55,10 @@ def setup_before_agent_call(callback_context: CallbackContext):
     callback_context.state["chat_history"] = chat_history 
     callback_context.state["current_date"] = current_date
     callback_context.state["debug_mode"] = debug
-    #callback_context.state["event_dataset"] = f"gam-dwh.{business_context['dataset_id']}.mixpanel_all_data_export"
-    #callback_context.state["user_property_dataset"] = f"gam-dwh.{business_context['dataset_id']}.mixpanel_user_data"
-    callback_context.state["event_dataset"] = "gam-dwh.mixpanel_data_3266709.mixpanel_all_data_export_y_test"
-    callback_context.state["user_property_dataset"] = "gam-dwh.mixpanel_data_3266709.mixpanel_user_data"
+    callback_context.state["event_dataset"] = f"gam-dwh.{business_context['dataset_id']}.mixpanel_all_data_export"
+    callback_context.state["user_property_dataset"] = f"gam-dwh.{business_context['dataset_id']}.mixpanel_user_data"
+    #callback_context.state["event_dataset"] = "gam-dwh.mixpanel_data_3080168.mixpanel_all_data_export"
+    #callback_context.state["user_property_dataset"] = "gam-dwh.mixpanel_data_3080168.mixpanel_user_data"
 
 # ────────────────────────────────────────────────────────────────────────────
 # Google Search agent

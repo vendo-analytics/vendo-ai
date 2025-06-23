@@ -1,12 +1,11 @@
 user_state = {}
-current_connection_id = "gb1uauyn0Khjcs4Fgxh8"  # Default fallback
+current_connection_id = "461kP58FBNSmppmolK89"  # Default fallback
 current_session_id = None  # Default session ID
 debug_mode = False  # Global debug mode state
 
-
 def set_current_connection_id(connection_id: str):
     """Set the current active connection ID globally"""
-    global current_connection_id
+    #global current_connection_id
     current_connection_id = connection_id
     print(f"[DEBUG] Set current connection ID to: {connection_id}", flush=True)
 

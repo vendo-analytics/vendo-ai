@@ -592,6 +592,25 @@ class FirestoreSessionService(BaseSessionService):
             print(f"[ERROR] Failed to get raw user properties from BigQuery: {str(e)}", flush=True)
             return []
 
+    def list_companies(self):
+        """
+        Returns a list of dicts: {id, name} for all companies in vendo_ai_memory.
+        """
+        companies = []
+        docs = self.collection.stream()
+        for doc in docs:
+            print(f"[DEBUG] Doc: {doc}", flush=True)
+            data = doc.to_dict()
+            display_name = (
+                data.get("business_context", {}).get("company_short")
+                if data.get("business_context")
+                else None
+            )
+            if display_name:
+                print(f"[DEBUG] Display name: {display_name}", flush=True)
+                companies.append({"id": doc.id, "name": display_name})
+        return companies
+
 
 def embed_text(content: str) -> List[float]:
     client = genai.Client()

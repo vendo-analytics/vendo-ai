@@ -267,7 +267,7 @@ export function DashboardView({
       <div className="mb-6">
         <h1 className="text-3xl font-bold">Dashboard</h1>
         <p className="text-muted-foreground mt-1">
-          Welcome back! Here's what's happening with {selectedCompany?.name || "your data"}.
+          Welcome back! Here&apos;ts what&apos;ts happening with {selectedCompany?.name || "your data"}.
         </p>
       </div>
 

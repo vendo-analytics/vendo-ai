@@ -23,8 +23,8 @@ export default function RootLayout({
       <body className={inter.className}>
         <ConnectionProvider>
           <SidebarProvider>
-            {/* {children}
-            <Toaster position="top-center" /> */}
+            {children}
+            <Toaster position="top-center" />
           </SidebarProvider>
         </ConnectionProvider>
       </body>

@@ -999,3 +999,13 @@ async def slack_text_endpoint(request: SlackTextRequest):
     except Exception as e:
         result_text = f"Error: {str(e)}"
     return {"text": result_text} 
+
+@app.get("/api/companies")
+async def get_companies():
+    try:
+        companies = firestore_session_service.list_companies()
+        print(f"[DEBUG] Companies: {companies}", flush=True)
+        return companies
+    except Exception as e:
+        logger.error(f"[GET /api/companies] {e}")
+        raise HTTPException(status_code=500, detail=str(e))

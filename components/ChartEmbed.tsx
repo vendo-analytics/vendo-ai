@@ -72,9 +72,9 @@ const extractDataArray = (chartBlock: string): any[] => {
     const jsonStr = match[1].replace(/'/g, '"');
     return JSON.parse(jsonStr);
   } catch {
-    return [];
-  }
-};
+      return [];
+    }
+  };
 
 const ChartEmbed: React.FC<ChartEmbedProps> = ({ chartJsx }) => {
   const caption = extractCaption(chartJsx);

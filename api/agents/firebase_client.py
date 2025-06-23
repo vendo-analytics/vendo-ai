@@ -18,6 +18,8 @@ import json
 from google.cloud import bigquery
 from datetime import datetime
 
+from dotenv import load_dotenv
+load_dotenv()
 
 _table_users = 'vendo_users'
 _table_organizations = 'vendo_organizations'

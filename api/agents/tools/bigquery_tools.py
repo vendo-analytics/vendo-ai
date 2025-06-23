@@ -70,7 +70,7 @@ def query_bigquery(query: str):
 
 def get_bigquery_schema():
     credentials = service_account.Credentials.from_service_account_file(
-            'adk_cred.json',
+            'service_key.json',
             scopes=['https://www.googleapis.com/auth/cloud-platform']
         )
     client = bigquery.Client()

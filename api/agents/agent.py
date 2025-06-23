@@ -64,6 +64,7 @@ def setup_before_agent_call(callback_context: CallbackContext):
     callback_context.state["user_property_schema"] = user_property_schema
     callback_context.state["event_schema"] = event_schema
 
+
 # ────────────────────────────────────────────────────────────────────────────
 # Google Search agent
 # ────────────────────────────────────────────────────────────────────────────

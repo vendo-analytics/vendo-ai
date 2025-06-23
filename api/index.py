@@ -33,6 +33,7 @@ from langfuse import Langfuse
 import secrets
 from fastapi import HTTPException
 from typing import Optional
+from pydantic import BaseModel
 
 # Logging
 logging.basicConfig(level=logging.DEBUG)
@@ -610,7 +611,7 @@ async def delete_annotation(annotation_id: str, connection_id: str = Query(...))
 @app.post("/api/annotations")
 async def create_annotation(data: dict = Body(...)):
     # Get connection_id from the request body instead of query parameter for POST
-    connection_id = data.get("connection_id", "001")  # Fallback to "001" if not provided
+    connection_id = data.get("connection_id", "gb1uauyn0Khjcs4Fgxh8")  # Fallback to "001" if not provided
     client = MixpanelClient(connection_id)
     description = data.get("description")
     date = data.get("date")
@@ -765,7 +766,7 @@ async def set_debug_mode_endpoint(request: dict):
 
 
 @app.get("/api/mixpanel-event-schema")
-async def get_mixpanel_event_schema(connection_id: str = "001"):
+async def get_mixpanel_event_schema(connection_id: str = "gb1uauyn0Khjcs4Fgxh8"):
     """
     Get merged Mixpanel Event Schema (raw + user edits) from Firebase for a specific connection.
     Events and their properties are sorted alphabetically.
@@ -954,6 +955,61 @@ async def search_mixpanel_events_by_description(search_term: str = Query(...), c
         from .agents.sub_agents.data_retrieval.tools import search_events_by_description
         result = search_events_by_description(search_term, connection_id)
         return result
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) 
+
+
+class SlackTextRequest(BaseModel):
+    prompt: str
+    connection_id: str = "slack_user"
+    session_id: str = None
+
+@app.post("/api/slack-text")
+async def slack_text_endpoint(request: SlackTextRequest):
+    """
+    Accepts a prompt from Slack, runs the root_agent, and returns a plain text response.
+    """
+    # Use a unique session_id if not provided
+    session_id = request.session_id or f"slack_{int(datetime.now().timestamp())}"
+    connection_id = request.connection_id or "slack_user"
+    # Create session
+    session = await session_service.create_session(
+        app_name=APP_NAME,
+        user_id=connection_id,
+        session_id=session_id
+    )
+    set_current_connection_id(connection_id)
+    set_current_session_id(session_id)
+    runner = Runner(app_name=APP_NAME, agent=root_agent, session_service=session_service)
+    run_config = RunConfig(response_modalities=["text"])
+    content_obj = Content(role="user", parts=[Part.from_text(text=request.prompt)])
+    result_text = ""
+    try:
+        result = runner.run_async(
+            session_id=session_id,
+            user_id=connection_id,
+            new_message=content_obj,
+            run_config=run_config
+        )
+        async for event in result:
+            if event.is_final_response():
+                if event.content and event.content.parts:
+                    result_text = event.content.parts[0].text
+                    break
+    except Exception as e:
+        result_text = f"Error: {str(e)}"
+    return {"text": result_text} 
+
+@app.get("/api/companies")
+async def get_companies():
+    try:
+        companies = firestore_session_service.list_companies()
+        print(f"[DEBUG] Companies: {companies}", flush=True)
+        # Filter companies for only "Piri Red"
+        filtered_companies = [company for company in companies if company.get('name') == 'Piri']
+        print(f"[DEBUG] Filtered Companies: {filtered_companies}", flush=True)
+        return filtered_companies
+    except Exception as e:
+        logger.error(f"[GET /api/companies] {e}")
+        raise HTTPException(status_code=500, detail=str(e))

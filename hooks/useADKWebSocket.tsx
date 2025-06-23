@@ -205,7 +205,17 @@ export function useADKWebSocket({
       return;
     }
 
-    const wsUrl = `ws://localhost:8000/ws/${sessionId}?connection_id=${connectionId}`;
+    // const wsUrl = `ws://localhost:8000/ws/${sessionId}?connection_id=${connectionId}`;
+    // console.log("[WS] Attempting to connect to:", wsUrl);
+
+      // 🔑 1️⃣ Pick local or prod backend
+    const wsBaseUrl =
+    process.env.NODE_ENV === "development"
+      ? "ws://localhost:8000"
+      : process.env.NEXT_PUBLIC_WS_URL || "";
+
+  // 🔑 2️⃣ Build full websocket URL
+    const wsUrl = `${wsBaseUrl}/ws/${sessionId}?connection_id=${connectionId}`;
     console.log("[WS] Attempting to connect to:", wsUrl);
     
     try {

@@ -208,10 +208,10 @@ export function useADKWebSocket({
     // const wsUrl = `ws://localhost:8000/ws/${sessionId}?connection_id=${connectionId}`;
     // console.log("[WS] Attempting to connect to:", wsUrl);
 
-      // 🔑 1️⃣ Pick local or prod backend
+  //     // 🔑 1️⃣ Pick local or prod backend
     const wsBaseUrl =
     process.env.NODE_ENV === "development"
-      ? "ws://localhost:8000"
+      ? "ws://127.0.0.1:8000"
       : process.env.NEXT_PUBLIC_WS_URL || "";
 
   // 🔑 2️⃣ Build full websocket URL
@@ -298,7 +298,7 @@ export function useADKWebSocket({
       };
 
       socket.onerror = (err) => {
-        console.error("[WS] WebSocket error:", err);
+        console.warn("[WS] WebSocket error:", err);
         setIsConnected(false);
         clearInterval(pingInterval);
       };
@@ -337,7 +337,7 @@ export function useADKWebSocket({
           console.log("[WS] Sending queued message:", message);
           ws.current.send(JSON.stringify(message));
         } else {
-          console.error("[WS] Failed to send message - socket still not ready, state:", ws.current?.readyState);
+          console.warn("[WS] Failed to send message - socket still not ready, state:", ws.current?.readyState);
         }
       }, 1000);
       return;

@@ -1,7 +1,11 @@
 {
+  "framework": "nextjs",
+  "buildCommand": "pnpm build",
+  "installCommand": "pnpm install",
   "functions": {
-    "api/**": {
-      "excludeFiles": "{.next,.git,node_modules}/**"
+    "app/**/*.{js,ts,jsx,tsx}": {
+      "memory": 1024
     }
-  }
+  },
+  "regions": ["iad1"]
 }

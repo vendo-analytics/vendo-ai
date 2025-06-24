@@ -97,7 +97,6 @@ root_agent = Agent(
     before_agent_callback=setup_before_agent_call, #Add client context, schemas
     generate_content_config=types.GenerateContentConfig(
         temperature=0,
-        candidate_count=3,
         top_p=0.95,
         top_k=20,
     )

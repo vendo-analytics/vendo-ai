@@ -3,12 +3,19 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "fastapi-dev": "cross-env SSL_CERT_FILE=$(python3 -c 'import certifi; print(certifi.where())') MODEL_GEMINI=gemini-2.0-flash pip3 install -r requirements.txt && python3 -m uvicorn api.index:app --reload",
+    "install-python-deps": "cross-env SSL_CERT_FILE=$(python3 -c 'import certifi; print(certifi.where())') pip3 install -r requirements.txt --use-deprecated=legacy-resolver",
+    "fastapi-dev": "cross-env SSL_CERT_FILE=$(python3 -c 'import certifi; print(certifi.where())') MODEL_GEMINI=gemini-2.0-flash python3 -m uvicorn api.index:app --reload",
+    "fastapi-dev-with-install": "cross-env SSL_CERT_FILE=$(python3 -c 'import certifi; print(certifi.where())') MODEL_GEMINI=gemini-2.0-flash pip3 install -r requirements.txt --use-deprecated=legacy-resolver && python3 -m uvicorn api.index:app --reload",
     "next-dev": "next dev",
     "dev": "concurrently \"pnpm run next-dev\" \"pnpm run fastapi-dev\"",
+    "dev-with-install": "concurrently \"pnpm run next-dev\" \"pnpm run fastapi-dev-with-install\"",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "deploy:frontend": "vercel --prod",
+    "deploy:backend": "gcloud run deploy vendo-ai-backend --source . --region us-central1 --allow-unauthenticated",
+    "docker:build": "docker build -t vendo-ai-backend .",
+    "docker:run": "docker run -p 8000:8000 vendo-ai-backend"
   },
   "dependencies": {
     "@ai-sdk/ui-utils": "^0.0.20",

@@ -73,6 +73,29 @@ app.include_router(tts_router)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True,
                    allow_methods=["*"], allow_headers=["*"])
 
+@app.get("/")
+async def root():
+    """Root endpoint for ADK Web Server"""
+    return {
+        "message": "ADK Web Server is running",
+        "status": "active",
+        "websocket_endpoint": "/ws/{session_id}?connection_id={connection_id}",
+        "documentation": {
+            "swagger_ui": "/docs",
+            "redoc": "/redoc"
+        },
+        "available_endpoints": [
+            "/api/chat/history",
+            "/api/general-context", 
+            "/api/business-context",
+            "/api/events-data",
+            "/api/annotations",
+            "/api/user-properties",
+            "/api/debug-mode",
+            "/api/mixpanel-event-schema"
+        ]
+    }
+
 active_contexts = {}
 
 
@@ -120,7 +143,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_i
     print(f"[CONNECTED] #{session_id} User: {connection_id}")
 
     # Create session with the provided session ID
-    session = await session_service.create_session(
+    session = session_service.create_session(
         app_name=APP_NAME, 
         user_id=connection_id, 
         session_id=session_id  # Use the session_id from frontend
@@ -166,7 +189,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str, connection_i
                 # Generate summary for first message
                 if is_first_message:
                     # Create a separate session for summary generation
-                    summary_session = await session_service.create_session(
+                    summary_session = session_service.create_session(
                         app_name=APP_NAME,
                         user_id=connection_id,
                         session_id=f"{session_id}_summary"

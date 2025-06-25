@@ -1,0 +1,48 @@
+# Python requirements and virtual environments
+requirements.txt
+requirements-dev.txt
+venv/
+.venv/
+env/
+ENV/
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Python-specific files that shouldn't be deployed to Netlify
+*.pyc
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# API and deployment scripts
+deploy.sh
+api/
+
+# Local development files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Service keys
+service_key.json
+service_key.yaml
+service_key.yml
+*service_key* 

@@ -10,10 +10,11 @@ import { useMessageRatings } from "@/hooks/useMessageRatings"
 import type { Message, CreateMessage, ChatRequestOptions } from "ai"
 import { toast } from "sonner"
 import { AudioToggle } from "./AudioToggle"
+import { StatusIndicator } from "./status-indicator"
 
 interface ChatProps {
-  chatId?: string;
-  initialMessages?: Message[];
+  chatId?: string
+  initialMessages?: Message[]
 }
 
 export function Chat({ chatId = "001", initialMessages = [] }: ChatProps) {
@@ -21,15 +22,15 @@ export function Chat({ chatId = "001", initialMessages = [] }: ChatProps) {
   const [input, setInput] = useState<string>("")
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [isAudioEnabled, setIsAudioEnabled] = useState(false)
-  const currentChatRef = useRef<string>(chatId);
+  const currentChatRef = useRef<string>(chatId)
 
   // Add ratings hook
   const { toggleRating, getRating } = useMessageRatings()
 
   // Update messages when initialMessages changes
   useEffect(() => {
-    setMessages(initialMessages);
-  }, [initialMessages]);
+    setMessages(initialMessages)
+  }, [initialMessages])
 
   const append = async (message: Message | CreateMessage, chatRequestOptions?: ChatRequestOptions): Promise<string> => {
     setMessages((prev) => [...prev, message as Message])
@@ -50,23 +51,23 @@ export function Chat({ chatId = "001", initialMessages = [] }: ChatProps) {
     loadSession,
   } = useADKWebSocket({
     onTextMessage: (content, _isFinal = true, _isPartial = false, role, traceId) => {
-      if (!content || !role) return;
-      if (content.trim() === '') return;
-      
+      if (!content || !role) return
+      if (content.trim() === "") return
+
       setMessages((prev) => [
-              ...prev,
-              {
+        ...prev,
+        {
           id: `${role}-${Date.now()}`,
           role,
           content,
-                traceId,
-              },
-      ]);
+          traceId,
+        },
+      ])
     },
     onTurnComplete: () => setIsLoading(false),
     isAudioEnabled,
     setIsAudioEnabled,
-  });
+  })
 
   // Add effect to load chat history when chatId changes
   useEffect(() => {
@@ -74,28 +75,27 @@ export function Chat({ chatId = "001", initialMessages = [] }: ChatProps) {
     if (chatId !== currentChatRef.current) {
       const loadChatHistory = async () => {
         try {
-          setIsLoading(true);
+          setIsLoading(true)
           // Clear existing messages first
-          setMessages([]);
-          
-          // Load the new chat session
-          await loadSession(chatId);
-          // Update the ref after successful load
-          currentChatRef.current = chatId;
-        } catch (error) {
-          console.error("Error loading chat history:", error);
-          toast.error("Failed to load chat history");
-        } finally {
-          setIsLoading(false);
-        }
-      };
+          setMessages([])
 
-      loadChatHistory();
+          // Load the new chat session
+          await loadSession(chatId)
+          // Update the ref after successful load
+          currentChatRef.current = chatId
+        } catch (error) {
+          console.error("Error loading chat history:", error)
+          toast.error("Failed to load chat history")
+        } finally {
+          setIsLoading(false)
+        }
+      }
+
+      loadChatHistory()
     }
-  }, [chatId, loadSession]);
+  }, [chatId, loadSession])
 
   useEffect(() => {
-    
     if (!isConnected) {
       // Only show error if we've attempted to connect
       console.log("WebSocket not connected - running in demo mode")
@@ -139,6 +139,59 @@ export function Chat({ chatId = "001", initialMessages = [] }: ChatProps) {
 
   return (
     <div className="flex flex-col h-full bg-background relative">
+      {/* Header with Status Indicator */}
+      <div className="flex justify-between items-center p-4 border-b shrink-0 bg-background/95 backdrop-blur-sm">
+        <h1 className="text-xl font-bold">Chat</h1>
+        <div className="flex items-center gap-4">
+          <StatusIndicator isConnected={isConnected} isConnecting={false} />
+          <AudioToggle
+            isEnabled={isAudioEnabled}
+            onToggle={() => {
+              console.log("[Audio] Toggle clicked, current state:", isAudioEnabled)
+              const newState = !isAudioEnabled
+              setIsAudioEnabled(newState)
+              // If turning off audio, immediately stop any playing TTS
+              if (!newState && stopTTS) {
+                stopTTS()
+              }
+            }}
+          />
+          <button
+            onClick={isRecording ? stopListening : startListening}
+            className={`p-2 rounded-full transition-colors ${
+              isRecording ? "bg-red-500 hover:bg-red-600" : "bg-blue-500 hover:bg-blue-600"
+            }`}
+          >
+            {isRecording ? (
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5 text-white"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5 text-white"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+                />
+              </svg>
+            )}
+          </button>
+        </div>
+      </div>
+
       {/* Messages Container */}
       <div
         ref={messagesContainerRef}

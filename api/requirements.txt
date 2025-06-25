@@ -28,3 +28,5 @@ urllib3==1.26.20
 slack_bolt
 httpx
 litellm==1.72.4
+deprecated
+google-generativeai

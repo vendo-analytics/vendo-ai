@@ -5,9 +5,9 @@ interface StatusIndicatorProps {
   
   export function StatusIndicator({ isConnected, isConnecting }: StatusIndicatorProps) {
     const getStatusConfig = () => {
-      if (isConnecting) {
+              if (isConnecting) {
         return {
-          dotClass: "bg-yellow-500 animate-[breathe_2s_ease-in-out_infinite]",
+          dotClass: "bg-yellow-500 animate-[breathe_4s_ease-in-out_infinite]",
           textClass: "text-yellow-600",
           text: "Connecting...",
         }
@@ -17,9 +17,9 @@ interface StatusIndicatorProps {
           textClass: "text-green-600",
           text: "Connected",
         }
-      } else {
+              } else {
         return {
-          dotClass: "bg-yellow-500 animate-[breathe_2s_ease-in-out_infinite]",
+          dotClass: "bg-yellow-500 animate-[breathe_4s_ease-in-out_infinite]",
           textClass: "text-yellow-600",
           text: "Connecting...",
         }

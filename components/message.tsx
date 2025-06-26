@@ -226,9 +226,24 @@ export const ThinkingMessage = () => {
         </div>
 
         <div className="flex flex-col gap-2 w-full">
-          <div className="flex flex-col gap-4 text-muted-foreground">Thinking...</div>
+          <div className="flex flex-col gap-4 text-muted-foreground">
+            <span className="flex items-center">
+              Thinking
+              <span className="ml-0">
+                <span className="animate-[ellipsis_1.5s_infinite] inline-block">.</span>
+                <span className="animate-[ellipsis_1.5s_infinite_0.5s] inline-block">.</span>
+                <span className="animate-[ellipsis_1.5s_infinite_1s] inline-block">.</span>
+              </span>
+            </span>
+          </div>
         </div>
       </div>
+      <style jsx>{`
+        @keyframes ellipsis {
+          0%, 60% { opacity: 0; }
+          30% { opacity: 1; }
+        }
+      `}</style>
     </motion.div>
   )
 }

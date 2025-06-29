@@ -1,41 +1,162 @@
-# AI SDK Python Streaming Preview
+# Vendo AI Analytics Assistant
 
-This template demonstrates the usage of [Data Stream Protocol](https://sdk.vercel.ai/docs/ai-sdk-ui/stream-protocol#data-stream-protocol) to stream chat completions from a Python endpoint ([FastAPI](https://fastapi.tiangolo.com)) and display them using the [useChat](https://sdk.vercel.ai/docs/ai-sdk-ui/chatbot#chatbot) hook in your Next.js application.
+A sophisticated AI-powered analytics assistant that provides real-time business insights through natural language conversations. Built with Next.js, FastAPI, and WebSocket connections for seamless real-time communication.
 
-## Deploy your own
+## ✨ Features
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fvercel-labs%2Fai-sdk-preview-python-streaming&env=OPENAI_API_KEY&envDescription=API%20keys%20needed%20for%20application&envLink=https%3A%2F%2Fgithub.com%2Fvercel-labs%2Fai-sdk-preview-python-streaming%2Fblob%2Fmain%2F.env.example)
+- **🤖 AI-Powered Chat Interface** - Natural language queries for business analytics
+- **📊 Dynamic Chart Generation** - Automatic visualization of data insights
+- **🔗 Real-time WebSocket Connection** - Live streaming responses with status indicators
+- **🎯 Multi-Agent Architecture** - Specialized agents for data analysis, planning, and retrieval
+- **📈 BigQuery Integration** - Direct access to your data warehouse
+- **🔥 Firebase Backend** - Real-time database and authentication
+- **📱 Responsive Design** - Works seamlessly on desktop and mobile
+- **🎤 Voice Integration** - Speech-to-text and text-to-speech capabilities
+- **⭐ Message Ratings** - Feedback system for continuous improvement
+- **📋 Business Context Management** - Maintain context across conversations
+- **🚀 Slack Integration** - Connect with your team workflows
 
-## How to use
+## 🏗️ Architecture
 
-Run [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app) with [npm](https://docs.npmjs.com/cli/init), [Yarn](https://yarnpkg.com/lang/en/docs/cli/create/), or [pnpm](https://pnpm.io) to bootstrap the example:
+### Frontend (Next.js 15)
+- React 19 with App Router
+- Tailwind CSS + Shadcn UI components
+- WebSocket client for real-time communication
+- Audio recording and playback
+- Dynamic chart rendering
 
+### Backend (FastAPI)
+- Multi-agent system with specialized roles:
+  - **Analyst Agent** - Data analysis and insights
+  - **Data Planner** - Query planning and optimization  
+  - **Data Retrieval** - Fetching and processing data
+- WebSocket server for real-time streaming
+- Firebase integration for data persistence
+- BigQuery integration for analytics
+- Slack bot integration
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Node.js 18+
+- Python 3.9+
+- Google Cloud account with BigQuery access
+- Firebase project
+- OpenAI API key
+
+### Installation
+
+1. **Clone the repository**
 ```bash
-npx create-next-app --example https://github.com/vercel-labs/ai-sdk-preview-python-streaming ai-sdk-preview-python-streaming-example
+git clone <your-repo-url>
+cd ai-sdk-preview-python-streaming
 ```
 
+2. **Frontend Setup**
 ```bash
-yarn create next-app --example https://github.com/vercel-labs/ai-sdk-preview-python-streaming ai-sdk-preview-python-streaming-example
+# Install Node.js dependencies
+npm install
+# or
+pnpm install
 ```
 
+3. **Backend Setup**
 ```bash
-pnpm create next-app --example https://github.com/vercel-labs/ai-sdk-preview-python-streaming ai-sdk-preview-python-streaming-example
+# Create virtual environment
+python -m venv venv
+
+# Activate virtual environment
+# On macOS/Linux:
+source venv/bin/activate
+# On Windows:
+venv\Scripts\activate
+
+# Install Python dependencies
+pip install -r api/requirements.txt
 ```
 
-To run the example locally you need to:
+4. **Environment Configuration**
 
-1. Sign up for accounts with the AI providers you want to use (e.g., OpenAI, Anthropic).
-2. Obtain API keys for each provider.
-3. Set the required environment variables as shown in the `.env.example` file, but in a new file called `.env`.
-4. `pnpm install` to install the required Node dependencies.
-5. `virtualenv venv` to create a virtual environment.
-6. `source venv/bin/activate` to activate the virtual environment.
-7. `pip install -r requirements.txt` to install the required Python dependencies.
-8. `pnpm dev` to launch the development server.
+Create a `.env.local` file in the root directory:
 
-## Learn More
+```env
+# OpenAI
+OPENAI_API_KEY=your_openai_api_key
 
-To learn more about the AI SDK or Next.js by Vercel, take a look at the following resources:
+# Google Cloud
+GOOGLE_CLOUD_PROJECT=your_project_id
+GOOGLE_API_KEY=your_google_api_key
+FIREBASE_DB_URL=https://your-project.firebaseio.com/
+
+# Langfuse (Optional - for observability)
+LANGFUSE_PUBLIC_KEY=your_langfuse_public_key
+LANGFUSE_SECRET_KEY=your_langfuse_secret_key
+LANGFUSE_HOST=https://us.cloud.langfuse.com
+
+# Slack (Optional)
+SLACK_BOT_TOKEN=your_slack_bot_token
+SLACK_APP_TOKEN=your_slack_app_token
+
+# API Configuration
+NEXT_PUBLIC_API_BASE=http://localhost:8000
+NEXT_PUBLIC_WS_URL=ws://localhost:8000
+```
+
+5. **Firebase Setup**
+
+Place your Firebase service account key as `adk_cred.json` in the root directory.
+
+6. **Run the Application**
+
+```bash
+# Terminal 1: Start the backend
+cd api
+uvicorn index:app --reload --port 8000
+
+# Terminal 2: Start the frontend
+npm run dev
+# or
+pnpm dev
+```
+
+Visit `http://localhost:3000` to start using the AI assistant!
+
+## 🔧 Configuration
+
+### Business Context
+- Configure your business information in the Firebase console
+- Set up data schemas in `api/agents/business_data/schemas_v2.py`
+- Customize agent prompts in the respective agent directories
+
+### BigQuery Integration
+- Ensure your service account has BigQuery access
+- Configure your dataset and table names in the agent tools
+- Set up proper IAM permissions for data access
+
+## 🏢 Deployment
+
+### Netlify (Frontend)
+The frontend is configured for Netlify deployment with automatic Python file exclusion.
+
+### Google Cloud Run (Backend)
+Use the provided `Dockerfile` and deployment scripts for Cloud Run deployment.
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License.
+
+## 🔗 Links
 
 - [AI SDK Documentation](https://sdk.vercel.ai/docs)
 - [Next.js Documentation](https://nextjs.org/docs)
+- [FastAPI Documentation](https://fastapi.tiangolo.com)
+- [Firebase Documentation](https://firebase.google.com/docs)

@@ -22,6 +22,7 @@ from .tools.notify_vendo import notify_vendo
 from .sub_agents.data_retrieval.agent import data_retrieval
 from .sub_agents.data_planner.agent import data_planner
 from .sub_agents.analyst.agent import analyst_agent
+from .sub_agents.mixpanel_mcp.agent import mixpanel_mcp_agent
 
 #Environment Variables
 from dotenv import load_dotenv
@@ -88,6 +89,7 @@ root_agent = Agent(
     sub_agents=[
         data_retrieval,
         data_planner,
+        mixpanel_mcp_agent,
         #analyst_agent
     ],
     tools=[

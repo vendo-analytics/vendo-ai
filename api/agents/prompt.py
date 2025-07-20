@@ -10,6 +10,8 @@ ROOT_AGENT_OVERVIEW = """
 | Name              | Purpose (When to Use)                                       | Example Request                        |
 |-------------------|-------------------------------------------------------------|----------------------------------------|
 | `data_retrieval`  | Data/analytics questions, reports, business metrics         | "Show revenue for Q1 2024 in AUD"      |
+| `mixpanel_mcp`    | Advanced Mixpanel analytics via MCP server                  | "Create a funnel analysis for our signup process" |
+| `data_planner`    | Add new tracking/instrumentation, measurement specs         | "Track newsletter signups (Sydney TZ)" |
 | `analyst_agent`   | Analyze datasets, generate insights, create visualizations  | "Analyze my data and tell me what you see" |
 </available_agents>
 
